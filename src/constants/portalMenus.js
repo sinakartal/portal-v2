@@ -3,7 +3,7 @@ import {
   Ship, Briefcase, BarChart3, Users, FileText,
   Store, Route, Layers, ClipboardList, Handshake,
   TrendingUp, CreditCard, Building2
-} from 'lucide-react'
+} from 'lucide-vue-next'
 
 export const CORPORATE_MENU = [
   {

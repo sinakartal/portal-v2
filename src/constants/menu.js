@@ -2,7 +2,7 @@ import {
   LayoutDashboard, Package, Truck, MapPin, BarChart3,
   Wallet, Settings, Users, Building2, Navigation,
   ClipboardList, Handshake
-} from 'lucide-react'
+} from 'lucide-vue-next'
 
 export const MENU_ITEMS = [
   {
