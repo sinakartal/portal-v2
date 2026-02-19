@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Package, Truck, MapPin, BarChart3,
   Wallet, Settings, Users, Building2, Navigation,
-  ClipboardList, Handshake
+  ClipboardList, Handshake, FileBarChart
 } from 'lucide-vue-next'
 
 export const MENU_ITEMS = [
@@ -45,6 +45,12 @@ export const MENU_ITEMS = [
     title: 'Analitik',
     path: '/analytics',
     icon: BarChart3,
+    permission: 'analytics:read',
+  },
+  {
+    title: 'Raporlar',
+    path: '/reports',
+    icon: FileBarChart,
     permission: 'analytics:read',
   },
   {

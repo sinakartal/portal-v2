@@ -92,6 +92,7 @@ function getRoutes() {
         { path: 'routes', component: () => import('@/pages/routes/RouteList.vue') },
         { path: 'routes/plan', component: () => import('@/pages/routes/RoutePlanning.vue') },
         { path: 'analytics', component: () => import('@/pages/analytics/Analytics.vue') },
+        { path: 'reports', component: () => import('@/pages/reports/Reports.vue') },
         { path: 'finance', component: () => import('@/pages/finance/Finance.vue') },
         { path: 'inventory', component: () => import('@/pages/inventory/InventoryDashboard.vue') },
         { path: 'inventory/reconciliation', component: () => import('@/pages/inventory/Reconciliation.vue') },
