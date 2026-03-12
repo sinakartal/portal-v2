@@ -195,7 +195,7 @@
       </h2>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <button
-          v-for="partner in MOCK_PARTNERS"
+          v-for="partner in partnerList"
           :key="partner.id"
           @click="selectedPartner = partner.id"
           :class="[
@@ -378,17 +378,19 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   ArrowLeft, Send, Package, Clock, AlertTriangle, CheckCircle,
   Search, Filter, ChevronLeft, ChevronRight, X
 } from 'lucide-vue-next'
+import { getOrders, getPartners, transferOrders } from '@/services/api'
 
 const router = useRouter()
 
 // ---- Mock Data ----
 
+// Fallback mock data (used as default until API responds)
 const MOCK_ORDERS = [
   { id: 'BRN-4530', district: 'Kadikoy', amount: 285, type: 'Express', waitMinutes: 15 },
   { id: 'BRN-4531', district: 'Besiktas', amount: 192, type: 'Standart', waitMinutes: 8 },
@@ -421,6 +423,10 @@ const MOCK_PARTNERS = [
   { id: 'getir', name: 'GETIR KURYE', status: 'busy', statusLabel: 'Yogun', statusColor: 'text-yellow-500', statusDot: 'bg-yellow-500', eta: 50, cost: 135 },
 ]
 
+// Reactive refs initialized with mock data as fallback
+const allOrders = ref([...MOCK_ORDERS])
+const partnerList = ref([...MOCK_PARTNERS])
+
 const BRINGO_AVG_COST = 148
 
 // ---- State ----
@@ -437,7 +443,7 @@ const perPage = 10
 // ---- Computed (replaces useMemo) ----
 
 const filteredOrders = computed(() => {
-  let result = [...MOCK_ORDERS]
+  let result = [...allOrders.value]
   if (search.value) {
     const s = search.value.toLowerCase()
     result = result.filter(o =>
@@ -460,7 +466,7 @@ const paginatedOrders = computed(() =>
 const selectedCount = computed(() => selectedOrders.value.length)
 
 const selectedPartnerData = computed(() =>
-  MOCK_PARTNERS.find(p => p.id === selectedPartner.value)
+  partnerList.value.find(p => p.id === selectedPartner.value)
 )
 
 const estimatedTotalCost = computed(() =>
@@ -502,8 +508,12 @@ const handleSelectAll = () => {
   }
 }
 
-const handleTransfer = () => {
+const handleTransfer = async () => {
   if (selectedCount.value > 0 && selectedPartner.value) {
+    const res = await transferOrders({
+      orderIds: selectedOrders.value,
+      partnerId: selectedPartner.value,
+    })
     showSuccessModal.value = true
   }
 }
@@ -514,4 +524,42 @@ const handleCloseModal = () => {
   selectedPartner.value = null
   selectAll.value = false
 }
+
+// ---- Load data from API ----
+
+onMounted(async () => {
+  const [ordersRes, partnersRes] = await Promise.all([
+    getOrders(),
+    getPartners(),
+  ])
+  if (ordersRes.ok && ordersRes.data) {
+    const orders = Array.isArray(ordersRes.data) ? ordersRes.data : ordersRes.data.orders || []
+    const pending = orders.filter(o => o.status === 'pending' || o.status === 'dispatched')
+    if (pending.length > 0) {
+      // Map API orders to the format needed (id, district, amount, type, waitMinutes)
+      allOrders.value = pending.map(o => ({
+        id: o.id || o.orderId,
+        district: o.zone || o.district || 'Bilinmiyor',
+        amount: o.price || o.cost || 0,
+        type: o.mode === 'instant' ? 'Express' : 'Standart',
+        waitMinutes: o.createdAt ? Math.round((Date.now() - o.createdAt) / 60000) : 0,
+      }))
+    }
+  }
+  if (partnersRes.ok && partnersRes.data) {
+    const partners = Array.isArray(partnersRes.data) ? partnersRes.data : partnersRes.data.partners || []
+    if (partners.length > 0) {
+      partnerList.value = partners.map(p => ({
+        id: p.id,
+        name: p.name,
+        status: p.isActive ? 'available' : 'busy',
+        statusLabel: p.isActive ? 'Musait' : 'Yogun',
+        statusColor: p.isActive ? 'text-green-500' : 'text-yellow-500',
+        statusDot: p.isActive ? 'bg-green-500' : 'bg-yellow-500',
+        eta: p.avgEta || 35,
+        cost: p.avgCost || 100,
+      }))
+    }
+  }
+})
 </script>

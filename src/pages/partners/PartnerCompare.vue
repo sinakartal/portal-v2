@@ -1,5 +1,23 @@
 <template>
   <div>
+    <!-- Loading State -->
+    <div v-if="loading" class="flex items-center justify-center py-20">
+      <div class="flex flex-col items-center gap-3">
+        <div class="w-10 h-10 border-4 border-slate-200 border-t-indigo-500 rounded-full animate-spin"></div>
+        <p class="text-sm text-slate-500">Veriler yukleniyor...</p>
+      </div>
+    </div>
+
+    <!-- Error State -->
+    <div v-else-if="error" class="flex items-center justify-center py-20">
+      <div class="bg-red-50 border border-red-200 rounded-xl p-6 max-w-md text-center">
+        <p class="text-red-600 font-medium mb-1">Hata</p>
+        <p class="text-sm text-red-500">{{ error }}</p>
+      </div>
+    </div>
+
+    <!-- Content -->
+    <template v-else>
     <!-- Header -->
     <div class="flex items-center gap-4 mb-6">
       <button
@@ -143,11 +161,14 @@
         </div>
       </div>
     </div>
+    </template>
   </div>
 </template>
 
 <script setup>
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { getPartners, getTransferCompare } from '@/services/api'
 import {
   ArrowLeft,
   Trophy,
@@ -160,9 +181,12 @@ import {
 
 const router = useRouter()
 
-// ---- Mock Data ----
+const loading = ref(true)
+const error = ref('')
 
-const performanceData = [
+// ---- Default Data (fallback) ----
+
+const performanceData = ref([
   {
     metric: 'Siparis',
     bringo: '12,450',
@@ -229,15 +253,50 @@ const performanceData = [
     worstKey: 'getir',
     type: 'lower',
   },
-]
+])
 
-const regionData = [
+const regionData = ref([
   { region: 'Kadikoy', bestPartner: 'Trendyol Go', deliveryRate: 98.2, reason: 'Yogun kurye agi ve kisa mesafe optimizasyonu' },
   { region: 'Besiktas', bestPartner: 'Trendyol Go', deliveryRate: 97.5, reason: 'Yuksek musteri yogunlugu ve deneyimli kuryeler' },
   { region: 'Sisli', bestPartner: 'Paket Taxi', deliveryRate: 95.8, reason: 'Trafik bilgisi ve alternatif rota kullanimi' },
   { region: 'Uskudar', bestPartner: 'Bringo', deliveryRate: 96.2, reason: 'Yerel depo yakinligi ve hizli dagitim' },
   { region: 'Esenyurt', bestPartner: 'Getir Kurye', deliveryRate: 89.2, reason: 'Genis kapsama alani ancak dusuk performans' },
-]
+])
+
+// ---- Fetch API Data ----
+
+onMounted(async () => {
+  try {
+    loading.value = true
+    const [partnersRes, compareRes] = await Promise.all([
+      getPartners(),
+      getTransferCompare(),
+    ])
+    loading.value = false
+
+    if (partnersRes.ok && partnersRes.data) {
+      const partners = Array.isArray(partnersRes.data) ? partnersRes.data : partnersRes.data.partners || []
+      if (partners.length > 0) {
+        // If API returns structured performance data, use it
+        if (partnersRes.data.performanceData) {
+          performanceData.value = partnersRes.data.performanceData
+        }
+      }
+    }
+
+    if (compareRes.ok && compareRes.data) {
+      // If API returns region comparison data, use it
+      if (Array.isArray(compareRes.data)) {
+        regionData.value = compareRes.data
+      } else if (compareRes.data.regions) {
+        regionData.value = compareRes.data.regions
+      }
+    }
+  } catch (e) {
+    loading.value = false
+    error.value = 'Veri yuklenirken bir hata olustu: ' + (e.message || 'Bilinmeyen hata')
+  }
+})
 
 const recommendations = [
   {

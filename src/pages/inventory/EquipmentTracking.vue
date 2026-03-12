@@ -12,14 +12,26 @@
 
     <!-- Summary Cards -->
     <div class="grid grid-cols-4 gap-4 mb-6">
-      <div v-for="(c, i) in summaryCards" :key="i" class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
-        <div class="flex items-center justify-between mb-3">
-          <span class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ c.label }}</span>
-          <div :class="['p-2 rounded-lg', c.bg]"><component :is="c.icon" :size="16" :class="c.color" /></div>
+      <template v-if="loading">
+        <div v-for="i in 4" :key="'sc-sk-'+i" class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="h-3 w-20 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
+            <div class="h-8 w-8 bg-slate-200 dark:bg-slate-700 rounded-lg animate-pulse" />
+          </div>
+          <div class="h-7 w-16 bg-slate-200 dark:bg-slate-700 rounded animate-pulse mb-1" />
+          <div class="h-3 w-14 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" />
         </div>
-        <p class="text-2xl font-bold text-slate-800 dark:text-white">{{ c.value }}</p>
-        <p class="text-xs text-slate-400 mt-1">{{ c.sub }}</p>
-      </div>
+      </template>
+      <template v-else>
+        <div v-for="(c, i) in summaryCards" :key="i" class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ c.label }}</span>
+            <div :class="['p-2 rounded-lg', c.bg]"><component :is="c.icon" :size="16" :class="c.color" /></div>
+          </div>
+          <p class="text-2xl font-bold text-slate-800 dark:text-white">{{ c.value }}</p>
+          <p class="text-xs text-slate-400 mt-1">{{ c.sub }}</p>
+        </div>
+      </template>
     </div>
 
     <!-- Filters -->
@@ -47,28 +59,40 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="c in filtered" :key="c.id" class="border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/50">
-            <td class="px-4 py-3 font-medium text-slate-800 dark:text-white">{{ c.name }}</td>
-            <td class="px-4 py-3 text-slate-600 dark:text-slate-400 font-mono text-xs">
-              <template v-if="c.pos">{{ c.pos }}</template>
-              <span v-else class="text-slate-300 dark:text-slate-600">-</span>
-            </td>
-            <td class="px-4 py-3 text-slate-600 dark:text-slate-400 font-mono text-xs">
-              <template v-if="c.bag">{{ c.bag }}</template>
-              <span v-else class="text-slate-300 dark:text-slate-600">-</span>
-            </td>
-            <td class="px-4 py-3 text-slate-600 dark:text-slate-400 font-mono text-xs">
-              <template v-if="c.motor">{{ c.motor }}</template>
-              <span v-else class="text-slate-300 dark:text-slate-600">-</span>
-            </td>
-            <td class="px-4 py-3 text-xs text-slate-500">
-              <template v-if="c.others.length > 0">{{ c.others.join(', ') }}</template>
-              <span v-else class="text-slate-300 dark:text-slate-600">-</span>
-            </td>
-            <td class="px-4 py-3">
-              <button @click="detailCourier = c" class="px-3 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs rounded-lg cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700">Detay</button>
-            </td>
-          </tr>
+          <template v-if="loading">
+            <tr v-for="i in 8" :key="'tbl-sk-'+i" class="border-b border-slate-50 dark:border-slate-800/50">
+              <td class="px-4 py-3"><div class="h-4 w-28 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" /></td>
+              <td class="px-4 py-3"><div class="h-4 w-16 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" /></td>
+              <td class="px-4 py-3"><div class="h-4 w-14 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" /></td>
+              <td class="px-4 py-3"><div class="h-4 w-16 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" /></td>
+              <td class="px-4 py-3"><div class="h-4 w-20 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" /></td>
+              <td class="px-4 py-3"><div class="h-7 w-14 bg-slate-200 dark:bg-slate-700 rounded-lg animate-pulse" /></td>
+            </tr>
+          </template>
+          <template v-else>
+            <tr v-for="c in filtered" :key="c.id" class="border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+              <td class="px-4 py-3 font-medium text-slate-800 dark:text-white">{{ c.name }}</td>
+              <td class="px-4 py-3 text-slate-600 dark:text-slate-400 font-mono text-xs">
+                <template v-if="c.pos">{{ c.pos }}</template>
+                <span v-else class="text-slate-300 dark:text-slate-600">-</span>
+              </td>
+              <td class="px-4 py-3 text-slate-600 dark:text-slate-400 font-mono text-xs">
+                <template v-if="c.bag">{{ c.bag }}</template>
+                <span v-else class="text-slate-300 dark:text-slate-600">-</span>
+              </td>
+              <td class="px-4 py-3 text-slate-600 dark:text-slate-400 font-mono text-xs">
+                <template v-if="c.motor">{{ c.motor }}</template>
+                <span v-else class="text-slate-300 dark:text-slate-600">-</span>
+              </td>
+              <td class="px-4 py-3 text-xs text-slate-500">
+                <template v-if="c.others.length > 0">{{ c.others.join(', ') }}</template>
+                <span v-else class="text-slate-300 dark:text-slate-600">-</span>
+              </td>
+              <td class="px-4 py-3">
+                <button @click="detailCourier = c" class="px-3 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs rounded-lg cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700">Detay</button>
+              </td>
+            </tr>
+          </template>
         </tbody>
       </table>
     </div>
@@ -76,19 +100,33 @@
     <!-- Recent Movements -->
     <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
       <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-4">Son Zimmet Hareketleri</h3>
-      <div class="space-y-3">
-        <div v-for="(m, i) in MOVEMENTS" :key="i" :class="['flex items-center gap-3 p-3 rounded-lg border-l-4', m.color, 'bg-slate-50 dark:bg-slate-800']">
-          <span class="text-lg">{{ m.icon }}</span>
-          <div class="flex-1">
-            <p class="text-sm text-slate-800 dark:text-white">
-              <span class="font-medium">{{ m.item }}</span>
-              <span class="text-slate-400 mx-1">{{ m.type === 'out' ? '->' : m.type === 'in' ? '<-' : '--' }}</span>
-              <span class="text-slate-600 dark:text-slate-400">{{ m.courier }}</span>
-            </p>
+      <template v-if="loading">
+        <div class="space-y-3">
+          <div v-for="i in 5" :key="'mv-sk-'+i" class="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+            <div class="w-8 h-8 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
+            <div class="flex-1">
+              <div class="h-4 w-48 bg-slate-200 dark:bg-slate-700 rounded animate-pulse mb-1" />
+              <div class="h-3 w-24 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" />
+            </div>
+            <div class="h-3 w-20 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
           </div>
-          <span class="text-xs text-slate-400">{{ m.time }}</span>
         </div>
-      </div>
+      </template>
+      <template v-else>
+        <div class="space-y-3">
+          <div v-for="(m, i) in MOVEMENTS" :key="i" :class="['flex items-center gap-3 p-3 rounded-lg border-l-4', m.color, 'bg-slate-50 dark:bg-slate-800']">
+            <span class="text-lg">{{ m.icon }}</span>
+            <div class="flex-1">
+              <p class="text-sm text-slate-800 dark:text-white">
+                <span class="font-medium">{{ m.item }}</span>
+                <span class="text-slate-400 mx-1">{{ m.type === 'out' ? '->' : m.type === 'in' ? '<-' : '--' }}</span>
+                <span class="text-slate-600 dark:text-slate-400">{{ m.courier }}</span>
+              </p>
+            </div>
+            <span class="text-xs text-slate-400">{{ m.time }}</span>
+          </div>
+        </div>
+      </template>
     </div>
 
     <!-- Assign Modal -->
@@ -233,12 +271,21 @@
 </template>
 
 <script setup>
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, onMounted } from 'vue'
 import {
   Search, Download, Plus, ArrowDownToLine, X, Smartphone, ShoppingBag,
   Bike, HardHat, Shirt, CloudRain, BatteryCharging, Check, AlertTriangle,
   Clock, ArrowUpFromLine, Wrench
 } from 'lucide-vue-next'
+
+// ========== LOADING STATE ==========
+const loading = ref(true)
+
+onMounted(() => {
+  setTimeout(() => {
+    loading.value = false
+  }, 1200)
+})
 
 const NAMES = [
   'Ali Riza Kaya', 'Mehmet Yilmaz', 'Veli Aksoy', 'Ayse Demir', 'Can Ozdemir',

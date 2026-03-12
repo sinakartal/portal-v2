@@ -8,20 +8,69 @@
         <select v-model="project" class="px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
           <option v-for="p in PROJECTS" :key="p">{{ p }}</option>
         </select>
-        <button class="p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer"><RefreshCw :size="16" class="text-slate-500" /></button>
+        <button @click="refreshData" class="p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer"><RefreshCw :size="16" class="text-slate-500" /></button>
         <button class="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer"><Download :size="14" /> Export</button>
       </div>
     </div>
 
+    <!-- KPI Cards: Toplam Ekipman | Aktif | Bakimda | Kayip -->
+    <div class="grid grid-cols-4 gap-4 mb-4">
+      <template v-if="loading">
+        <div v-for="i in 4" :key="'kpi-sk-'+i" class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="h-3 w-20 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
+            <div class="h-8 w-8 bg-slate-200 dark:bg-slate-700 rounded-lg animate-pulse" />
+          </div>
+          <div class="h-7 w-16 bg-slate-200 dark:bg-slate-700 rounded animate-pulse mb-1" />
+          <div class="h-3 w-24 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" />
+        </div>
+      </template>
+      <template v-else>
+        <div v-for="(c, i) in equipmentKpiCards" :key="'kpi-'+i" class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">{{ c.label }}</span>
+            <div :class="['p-2 rounded-lg', c.bg]"><component :is="c.icon" :size="16" :class="c.color" /></div>
+          </div>
+          <div class="text-2xl font-bold text-slate-800 dark:text-white">{{ c.value }}</div>
+          <p class="text-xs text-slate-400 mt-1">{{ c.sub }}</p>
+        </div>
+      </template>
+    </div>
+
     <!-- Summary Cards -->
     <div class="grid grid-cols-4 gap-4 mb-6">
-      <div v-for="(c, i) in summaryCards" :key="i" class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
-        <div class="flex items-center justify-between mb-3">
-          <span class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">{{ c.label }}</span>
-          <div :class="['p-2 rounded-lg', c.bg]"><component :is="c.icon" :size="16" :class="c.color" /></div>
+      <template v-if="loading">
+        <div v-for="i in 4" :key="'sum-sk-'+i" class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="h-3 w-20 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
+            <div class="h-8 w-8 bg-slate-200 dark:bg-slate-700 rounded-lg animate-pulse" />
+          </div>
+          <div class="h-7 w-16 bg-slate-200 dark:bg-slate-700 rounded animate-pulse mb-1" />
+          <div class="h-3 w-24 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" />
         </div>
-        <div class="text-2xl font-bold text-slate-800 dark:text-white">{{ c.value }}</div>
-        <p class="text-xs text-slate-400 mt-1">{{ c.sub }}</p>
+      </template>
+      <template v-else>
+        <div v-for="(c, i) in summaryCards" :key="i" class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">{{ c.label }}</span>
+            <div :class="['p-2 rounded-lg', c.bg]"><component :is="c.icon" :size="16" :class="c.color" /></div>
+          </div>
+          <div class="text-2xl font-bold text-slate-800 dark:text-white">{{ c.value }}</div>
+          <p class="text-xs text-slate-400 mt-1">{{ c.sub }}</p>
+        </div>
+      </template>
+    </div>
+
+    <!-- Maintenance Calendar Warnings -->
+    <div v-if="!loading && maintenanceWarnings.length > 0" class="mb-4 space-y-2">
+      <div v-for="w in maintenanceWarnings" :key="w.id" :class="['flex items-center gap-3 px-4 py-3 rounded-xl border', w.days < 7 ? 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800' : 'bg-yellow-50 dark:bg-yellow-900/10 border-yellow-200 dark:border-yellow-800']">
+        <Wrench :size="16" :class="w.days < 7 ? 'text-red-600' : 'text-yellow-600'" />
+        <span :class="['text-sm font-medium', w.days < 7 ? 'text-red-700 dark:text-red-400' : 'text-yellow-700 dark:text-yellow-400']">
+          {{ w.name }} - {{ w.equipment }} bakim tarihi {{ w.days }} gun sonra ({{ w.date }})
+        </span>
+        <span :class="['ml-auto px-2 py-0.5 rounded-full text-[11px] font-bold', w.days < 7 ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300']">
+          {{ w.days < 7 ? 'ACIL' : 'YAKIN' }}
+        </span>
       </div>
     </div>
 
@@ -49,56 +98,97 @@
         <table class="w-full text-sm">
           <thead>
             <tr class="border-b border-slate-100 dark:border-slate-800">
-              <th v-for="h in ['Kurye', 'Durum', 'Zimmet', 'Teslim', 'Bekleyen', 'Basarisiz', 'Nakit Uzerinde', 'Risk', 'Son Aktivite', 'Islemler']" :key="h" class="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{{ h }}</th>
+              <th v-for="h in ['Kurye', 'Durum', 'Atanan Kurye', 'Zimmet', 'Teslim', 'Bekleyen', 'Basarisiz', 'Nakit Uzerinde', 'Risk', 'Son Aktivite', 'Islemler']" :key="h" class="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{{ h }}</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="c in paged" :key="c.id" class="border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors relative cursor-pointer" @click="detail = c" @mouseenter="hovered = c.id" @mouseleave="hovered = null">
-              <td class="px-4 py-3">
-                <div class="flex items-center gap-3">
-                  <div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">{{ initials(c.name) }}</div>
-                  <div>
-                    <p class="font-medium text-slate-800 dark:text-white text-sm">{{ c.name }}</p>
-                    <p class="text-[11px] text-slate-400">{{ c.location }}</p>
+            <!-- Skeleton loading rows -->
+            <template v-if="loading">
+              <tr v-for="i in PAGE_SIZE" :key="'sk-'+i" class="border-b border-slate-50 dark:border-slate-800/50">
+                <td class="px-4 py-3">
+                  <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 animate-pulse" />
+                    <div>
+                      <div class="h-4 w-28 bg-slate-200 dark:bg-slate-700 rounded animate-pulse mb-1" />
+                      <div class="h-3 w-16 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" />
+                    </div>
                   </div>
-                </div>
-              </td>
-              <td class="px-4 py-3"><span :class="['px-2 py-1 rounded-full text-[11px] font-medium', statusColor(c.status)]">{{ statusLabel(c.status) }}</span></td>
+                </td>
+                <td class="px-4 py-3"><div class="h-5 w-16 bg-slate-200 dark:bg-slate-700 rounded-full animate-pulse" /></td>
+                <td class="px-4 py-3"><div class="h-4 w-24 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" /></td>
+                <td class="px-4 py-3"><div class="h-4 w-8 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" /></td>
+                <td class="px-4 py-3"><div class="h-4 w-8 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" /></td>
+                <td class="px-4 py-3"><div class="h-4 w-8 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" /></td>
+                <td class="px-4 py-3"><div class="h-4 w-8 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" /></td>
+                <td class="px-4 py-3"><div class="h-4 w-16 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" /></td>
+                <td class="px-4 py-3"><div class="h-5 w-14 bg-slate-200 dark:bg-slate-700 rounded-full animate-pulse" /></td>
+                <td class="px-4 py-3"><div class="h-3 w-16 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" /></td>
+                <td class="px-4 py-3"><div class="h-6 w-20 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" /></td>
+              </tr>
+            </template>
+            <!-- Data rows -->
+            <template v-else>
+              <tr v-for="c in paged" :key="c.id" class="border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors relative cursor-pointer" @click="detail = c" @mouseenter="hovered = c.id" @mouseleave="hovered = null">
+                <td class="px-4 py-3">
+                  <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">{{ initials(c.name) }}</div>
+                    <div>
+                      <p class="font-medium text-slate-800 dark:text-white text-sm">{{ c.name }}</p>
+                      <p class="text-[11px] text-slate-400">{{ c.location }}</p>
+                    </div>
+                  </div>
+                </td>
+                <td class="px-4 py-3"><span :class="['px-2 py-1 rounded-full text-[11px] font-medium', statusColor(c.status)]">{{ statusLabel(c.status) }}</span></td>
 
-              <td class="px-4 py-3 font-medium text-slate-700 dark:text-slate-300">{{ c.assigned }}</td>
-              <td class="px-4 py-3 text-green-600 font-medium">{{ c.delivered }}</td>
-              <td class="px-4 py-3 text-blue-600 font-medium">{{ c.pending }}</td>
-              <td class="px-4 py-3 text-red-500 font-medium">{{ c.failed }}</td>
-              <td class="px-4 py-3 font-semibold text-slate-800 dark:text-white">{{ c.cash > 0 ? fmt(c.cash) : '-' }}</td>
-              <td class="px-4 py-3"><span :class="['px-2 py-1 rounded-full text-[11px] font-medium', riskOf(c.cash).cls]">{{ riskOf(c.cash).dot }} {{ riskOf(c.cash).label }}</span></td>
-              <td class="px-4 py-3 text-slate-500 dark:text-slate-400 text-xs">{{ c.lastActivity }}</td>
-              <td class="px-4 py-3">
-                <div class="flex items-center gap-1">
-                  <button @click.stop="detail = c" class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg cursor-pointer" title="Detay"><Eye :size="14" class="text-slate-500" /></button>
-                  <button @click.stop="cashModal = c; cashAmount = c.cash.toString(); cashType = 'full'" class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg cursor-pointer" title="Mutabakat"><ArrowRightLeft :size="14" class="text-slate-500" /></button>
-                  <button @click.stop class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg cursor-pointer" title="Mesaj"><MessageSquare :size="14" class="text-slate-500" /></button>
-                </div>
-              </td>
-              <!-- Hover tooltip -->
-              <td v-if="hovered === c.id && c.status !== 'offline'" class="absolute right-0 top-0 z-30" style="position: absolute">
-                <div class="absolute right-4 top-2 w-64 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl p-4 z-50">
-                  <p class="font-semibold text-sm text-slate-800 dark:text-white mb-2">{{ c.name }} - Hizli Ozet</p>
-                  <div class="space-y-1.5 text-xs text-slate-600 dark:text-slate-400">
-                    <p>Zimmetli: {{ c.assigned }} siparis</p>
-                    <p>Teslim: {{ c.delivered }} | Bekleyen: {{ c.pending }}</p>
-                    <p>Urunler: {{ [c.equipment.pos && 'POS', c.equipment.bag && 'Canta', c.equipment.phone && 'Tel', c.equipment.motor && 'Motor'].filter(Boolean).join(', ') || '-' }}</p>
-                    <p>Nakit: {{ fmt(c.cash) }}</p>
-                    <p>   {{ c.cashOrders }} kapida odeme teslimi</p>
-                    <p>Ilk zimmet: {{ c.firstZimmet }}</p>
-                    <p>Son teslim: {{ c.lastDelivery }}</p>
+                <!-- Atanan Kurye column -->
+                <td class="px-4 py-3">
+                  <template v-if="c.assignedCourier">
+                    <router-link :to="`/couriers/${c.assignedCourier.id}`" class="text-primary hover:underline text-sm font-medium" @click.stop>
+                      {{ c.assignedCourier.name }}
+                    </router-link>
+                  </template>
+                  <template v-else>
+                    <button @click.stop="openAssignEquipmentModal(c)" class="flex items-center gap-1 px-2 py-1 bg-primary/10 hover:bg-primary/20 text-primary text-[11px] font-medium rounded-lg cursor-pointer transition-colors">
+                      <UserPlus :size="12" /> Ekipman Ata
+                    </button>
+                  </template>
+                </td>
+
+                <td class="px-4 py-3 font-medium text-slate-700 dark:text-slate-300">{{ c.assigned }}</td>
+                <td class="px-4 py-3 text-green-600 font-medium">{{ c.delivered }}</td>
+                <td class="px-4 py-3 text-blue-600 font-medium">{{ c.pending }}</td>
+                <td class="px-4 py-3 text-red-500 font-medium">{{ c.failed }}</td>
+                <td class="px-4 py-3 font-semibold text-slate-800 dark:text-white">{{ c.cash > 0 ? fmt(c.cash) : '-' }}</td>
+                <td class="px-4 py-3"><span :class="['px-2 py-1 rounded-full text-[11px] font-medium', riskOf(c.cash).cls]">{{ riskOf(c.cash).dot }} {{ riskOf(c.cash).label }}</span></td>
+                <td class="px-4 py-3 text-slate-500 dark:text-slate-400 text-xs">{{ c.lastActivity }}</td>
+                <td class="px-4 py-3">
+                  <div class="flex items-center gap-1">
+                    <button @click.stop="detail = c" class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg cursor-pointer" title="Detay"><Eye :size="14" class="text-slate-500" /></button>
+                    <button @click.stop="cashModal = c; cashAmount = c.cash.toString(); cashType = 'full'" class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg cursor-pointer" title="Mutabakat"><ArrowRightLeft :size="14" class="text-slate-500" /></button>
+                    <button @click.stop class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg cursor-pointer" title="Mesaj"><MessageSquare :size="14" class="text-slate-500" /></button>
                   </div>
-                  <div class="flex gap-2 mt-3">
-                    <button @click="detail = c" class="px-2 py-1 bg-primary/10 text-primary text-[11px] font-medium rounded cursor-pointer hover:bg-primary/20">Detay Gor</button>
-                    <button @click="cashModal = c; cashAmount = c.cash.toString(); cashType = 'full'" class="px-2 py-1 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 text-[11px] font-medium rounded cursor-pointer hover:bg-emerald-100">Mutabakat</button>
+                </td>
+                <!-- Hover tooltip -->
+                <td v-if="hovered === c.id && c.status !== 'offline'" class="absolute right-0 top-0 z-30" style="position: absolute">
+                  <div class="absolute right-4 top-2 w-64 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl p-4 z-50">
+                    <p class="font-semibold text-sm text-slate-800 dark:text-white mb-2">{{ c.name }} - Hizli Ozet</p>
+                    <div class="space-y-1.5 text-xs text-slate-600 dark:text-slate-400">
+                      <p>Zimmetli: {{ c.assigned }} siparis</p>
+                      <p>Teslim: {{ c.delivered }} | Bekleyen: {{ c.pending }}</p>
+                      <p>Urunler: {{ [c.equipment.pos && 'POS', c.equipment.bag && 'Canta', c.equipment.phone && 'Tel', c.equipment.motor && 'Motor'].filter(Boolean).join(', ') || '-' }}</p>
+                      <p>Nakit: {{ fmt(c.cash) }}</p>
+                      <p>   {{ c.cashOrders }} kapida odeme teslimi</p>
+                      <p>Ilk zimmet: {{ c.firstZimmet }}</p>
+                      <p>Son teslim: {{ c.lastDelivery }}</p>
+                    </div>
+                    <div class="flex gap-2 mt-3">
+                      <button @click="detail = c" class="px-2 py-1 bg-primary/10 text-primary text-[11px] font-medium rounded cursor-pointer hover:bg-primary/20">Detay Gor</button>
+                      <button @click="cashModal = c; cashAmount = c.cash.toString(); cashType = 'full'" class="px-2 py-1 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 text-[11px] font-medium rounded cursor-pointer hover:bg-emerald-100">Mutabakat</button>
+                    </div>
                   </div>
-                </div>
-              </td>
-            </tr>
+                </td>
+              </tr>
+            </template>
           </tbody>
         </table>
       </div>
@@ -109,6 +199,39 @@
           <button @click="page = Math.max(1, page - 1)" :disabled="page === 1" class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"><ChevronLeft :size="16" class="text-slate-500" /></button>
           <button v-for="p in visiblePages" :key="p" @click="page = p" :class="['w-8 h-8 rounded text-xs font-medium cursor-pointer', p === page ? 'bg-primary text-white' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700']">{{ p }}</button>
           <button @click="page = Math.min(totalPages, page + 1)" :disabled="page === totalPages" class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"><ChevronRight :size="16" class="text-slate-500" /></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ekipman Ata Modal -->
+    <div v-if="equipAssignModal" class="fixed inset-0 z-50 flex items-center justify-center">
+      <div class="absolute inset-0 bg-black/40" @click="equipAssignModal = null" />
+      <div class="relative w-[440px] bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <UserPlus :size="20" class="text-primary" />
+            <h3 class="text-lg font-bold text-slate-800 dark:text-white">Ekipman Ata</h3>
+          </div>
+          <button @click="equipAssignModal = null" class="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg cursor-pointer"><X :size="18" class="text-slate-500" /></button>
+        </div>
+        <div class="p-6 space-y-4">
+          <div class="bg-slate-50 dark:bg-slate-800 rounded-xl p-4">
+            <p class="text-xs text-slate-500 mb-1">Kurye</p>
+            <p class="text-sm font-semibold text-slate-800 dark:text-white">{{ equipAssignModal.name }}</p>
+            <p class="text-xs text-slate-400">{{ equipAssignModal.location }}</p>
+          </div>
+          <div class="space-y-2">
+            <label class="text-xs font-medium text-slate-500 block">Atanacak Ekipmanlar</label>
+            <label v-for="eq in quickAssignEquipment" :key="eq.key" :class="['flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors', eq.selected ? 'border-primary bg-primary/5 dark:bg-primary/10' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300']">
+              <input type="checkbox" v-model="eq.selected" class="accent-primary" />
+              <component :is="eq.icon" :size="16" :class="eq.selected ? 'text-primary' : 'text-slate-400'" />
+              <span class="text-sm text-slate-700 dark:text-slate-300">{{ eq.label }}</span>
+            </label>
+          </div>
+        </div>
+        <div class="px-6 py-4 border-t border-slate-200 dark:border-slate-700 flex justify-between">
+          <button @click="equipAssignModal = null" class="px-5 py-2.5 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 rounded-lg text-sm cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800">Iptal</button>
+          <button @click="equipAssignModal = null" class="px-6 py-2.5 bg-primary hover:bg-primary/90 text-white rounded-lg text-sm font-medium cursor-pointer transition-colors flex items-center gap-2"><Check :size="16" /> Ekipman Ata</button>
         </div>
       </div>
     </div>
@@ -331,6 +454,10 @@
   ekipmanlarini takip etmek icin kullanilir.
 
   Ozellikler:
+  - 4 KPI karti: Toplam Ekipman, Aktif, Bakimda, Kayip
+  - Atanan Kurye kolonu + Ekipman Ata hizli aksiyonu
+  - Bakim takvimi uyarilari (<7 gun = kirmizi, <30 gun = sari)
+  - Skeleton loading + dark mode destegi
   - Kurye listesi: Arama, durum filtresi, risk filtresi ile filtrelenebilir tablo
   - Satira tiklaninca sag taraftan detay paneli (slide-over) acilir
   - Detay panelindeki siparislere tiklaninca siparis detay sayfasina yonlendirilir
@@ -340,19 +467,37 @@
   Not: Tum veriler mock (sahte) veridir, API entegrasyonunda degistirilecek.
 -->
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   Search, RefreshCw, Download, Users, Package, Banknote, AlertTriangle,
   ChevronLeft, ChevronRight, X, Phone, MessageSquare, Eye, CheckCircle,
   Clock, Coffee, WifiOff, Truck, MapPin, ArrowRightLeft, Receipt,
-  Smartphone, ShoppingBag, CreditCard, Bike
+  Smartphone, ShoppingBag, CreditCard, Bike, Wrench, UserPlus, Check,
+  Box, Activity, ShieldAlert, HelpCircle
 } from 'lucide-vue-next'
 
 const router = useRouter()
 
 // Para birimi formatlama (TL)
 const fmt = (n) => '\u20BA' + n.toLocaleString('tr-TR')
+
+// ========== LOADING STATE ==========
+const loading = ref(true)
+
+onMounted(() => {
+  // Simulate API loading
+  setTimeout(() => {
+    loading.value = false
+  }, 1200)
+})
+
+const refreshData = () => {
+  loading.value = true
+  setTimeout(() => {
+    loading.value = false
+  }, 800)
+}
 
 // ========== SABIT DEGERLER ==========
 
@@ -381,7 +526,7 @@ const RISK_FILTERS = [
 
 /**
  * Kuryenin uzerindeki nakit miktarina gore risk seviyesini hesaplar.
- * 10K+ = Kritik, 5K+ = Riskli, 3K+ = Dikkat, altı = Normal
+ * 10K+ = Kritik, 5K+ = Riskli, 3K+ = Dikkat, altI = Normal
  */
 function riskOf(cash) {
   if (cash >= 10000) return { level: 'critical', label: 'Kritik', dot: '', cls: 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300' }
@@ -426,6 +571,15 @@ const COURIERS = NAMES.map((name, i) => {
   const pending = assigned - delivered - failed
   const cash = status === 'offline' ? 0 : Math.floor(seed(i + 4) * 14000)
   const mins = Math.floor(seed(i + 5) * 240)
+  // Atanan kurye - bazi kuryeler atanmis, bazilari atanmamis
+  const hasAssigned = seed(i + 20) > 0.35
+  const assignedCourier = hasAssigned ? {
+    id: i + 100,
+    name: NAMES[(i + 5) % NAMES.length].split(' ').slice(0, 2).join(' ')
+  } : null
+  // Bakim tarihi mock: bazilarina yakin bakim tarihi ata
+  const maintenanceDaysLeft = seed(i + 25) < 0.15 ? Math.floor(seed(i + 26) * 5) + 2 : seed(i + 25) < 0.3 ? Math.floor(seed(i + 27) * 20) + 10 : null
+
   return {
     id: i + 1, name, status, assigned, delivered, pending, failed, cash,
     lastActivity: mins < 5 ? 'Az once' : mins < 60 ? `${mins} dk once` : `${Math.floor(mins / 60)} saat once`,
@@ -440,8 +594,71 @@ const COURIERS = NAMES.map((name, i) => {
       phone: seed(i + 16) > 0.4,
       motor: seed(i + 17) > 0.5,
     },
+    assignedCourier,
+    maintenanceDaysLeft,
   }
 })
+
+// ========== EKIPMAN KPI HESAPLAMALARI ==========
+
+const equipmentTotals = computed(() => {
+  let total = 0, active = 0, maintenance = 0, lost = 0
+  COURIERS.forEach(c => {
+    const eqCount = [c.equipment.pos, c.equipment.bag, c.equipment.phone, c.equipment.motor].filter(Boolean).length
+    total += eqCount
+    if (c.status !== 'offline') {
+      active += eqCount
+    }
+    if (c.maintenanceDaysLeft !== null && c.maintenanceDaysLeft < 7) {
+      maintenance += 1
+    }
+  })
+  lost = Math.floor(total * 0.02) // %2 kayip orani mock
+  return { total, active, maintenance, lost }
+})
+
+const equipmentKpiCards = computed(() => [
+  { icon: Box, label: 'Toplam Ekipman', value: equipmentTotals.value.total, sub: 'envanterdeki toplam', color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-900/20' },
+  { icon: Activity, label: 'Aktif', value: equipmentTotals.value.active, sub: 'kullanilmakta', color: 'text-green-600', bg: 'bg-green-50 dark:bg-green-900/20' },
+  { icon: Wrench, label: 'Bakimda', value: equipmentTotals.value.maintenance, sub: 'bakim gerekli', color: 'text-orange-600', bg: 'bg-orange-50 dark:bg-orange-900/20' },
+  { icon: ShieldAlert, label: 'Kayip', value: equipmentTotals.value.lost, sub: 'kayip/hasarli', color: 'text-red-600', bg: 'bg-red-50 dark:bg-red-900/20' },
+])
+
+// ========== BAKIM TAKVIMI UYARILARI ==========
+
+const maintenanceWarnings = computed(() => {
+  const today = new Date()
+  return COURIERS
+    .filter(c => c.maintenanceDaysLeft !== null && c.maintenanceDaysLeft < 30)
+    .map(c => {
+      const futureDate = new Date(today)
+      futureDate.setDate(futureDate.getDate() + c.maintenanceDaysLeft)
+      const eqName = c.equipment.motor ? 'Motor' : c.equipment.pos ? 'POS' : 'Canta'
+      return {
+        id: c.id,
+        name: c.name,
+        equipment: eqName,
+        days: c.maintenanceDaysLeft,
+        date: futureDate.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' }),
+      }
+    })
+    .sort((a, b) => a.days - b.days)
+})
+
+// ========== EKIPMAN ATA MODAL ==========
+
+const equipAssignModal = ref(null)
+const quickAssignEquipment = reactive([
+  { key: 'pos', label: 'POS Cihazi', icon: CreditCard, selected: false },
+  { key: 'bag', label: 'Termal Canta', icon: ShoppingBag, selected: false },
+  { key: 'phone', label: 'Sirket Telefonu', icon: Smartphone, selected: false },
+  { key: 'motor', label: 'Motorsiklet', icon: Bike, selected: false },
+])
+
+const openAssignEquipmentModal = (courier) => {
+  quickAssignEquipment.forEach(eq => eq.selected = false)
+  equipAssignModal.value = courier
+}
 
 // ========== REACTIVE STATE ==========
 

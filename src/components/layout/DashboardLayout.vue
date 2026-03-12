@@ -1,6 +1,8 @@
 <script setup>
 import Sidebar from './Sidebar.vue'
 import Header from './Header.vue'
+import CopilotPanel from '@/components/copilot/CopilotPanel.vue'
+import CommandPalette from '@/components/CommandPalette.vue'
 </script>
 
 <template>
@@ -12,5 +14,7 @@ import Header from './Header.vue'
         <RouterView />
       </main>
     </div>
+    <CopilotPanel />
+    <CommandPalette />
   </div>
 </template>

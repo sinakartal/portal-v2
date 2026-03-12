@@ -791,6 +791,195 @@
         </div>
       </div>
     </div>
+
+    <!-- ==================== TAB 6: ALGORITMA AI RAPORU ==================== -->
+    <div v-if="activeTab === 'algoritma'" @vue:mounted="loadAlgoHistory()">
+      <template v-if="algoStatsComputed">
+        <!-- KPI Cards -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div class="bg-white rounded-xl p-4 border border-slate-100">
+            <div class="flex items-center gap-2 mb-2">
+              <div class="w-8 h-8 bg-violet-50 rounded-lg flex items-center justify-center">
+                <BarChart3 :size="16" class="text-violet-500" />
+              </div>
+            </div>
+            <p class="text-xl font-bold text-slate-800">{{ algoStatsComputed.total }}</p>
+            <p class="text-xs text-slate-500 mt-1">Toplam Deneyim</p>
+          </div>
+          <div class="bg-white rounded-xl p-4 border border-slate-100">
+            <div class="flex items-center gap-2 mb-2">
+              <div class="w-8 h-8 bg-emerald-50 rounded-lg flex items-center justify-center">
+                <Target :size="16" class="text-emerald-500" />
+              </div>
+            </div>
+            <p class="text-xl font-bold text-emerald-600">{{ algoStatsComputed.bestScore }}/10</p>
+            <p class="text-xs text-slate-500 mt-1">En Iyi Puan</p>
+          </div>
+          <div class="bg-white rounded-xl p-4 border border-slate-100">
+            <div class="flex items-center gap-2 mb-2">
+              <div class="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center">
+                <TrendingUp :size="16" class="text-blue-500" />
+              </div>
+            </div>
+            <p class="text-xl font-bold text-blue-600">{{ algoStatsComputed.avgScore }}/10</p>
+            <p class="text-xs text-slate-500 mt-1">Ortalama Puan</p>
+          </div>
+          <div class="bg-white rounded-xl p-4 border border-slate-100">
+            <div class="flex items-center gap-2 mb-2">
+              <div class="w-8 h-8 bg-amber-50 rounded-lg flex items-center justify-center">
+                <Cpu :size="16" class="text-amber-500" />
+              </div>
+            </div>
+            <p class="text-xl font-bold text-slate-800">{{ Object.keys(algoStatsComputed.profileBest).length }}</p>
+            <p class="text-xs text-slate-500 mt-1">Ogrenilen Profil</p>
+          </div>
+        </div>
+
+        <!-- En Basarili Kombinasyonlar -->
+        <div class="bg-white rounded-xl border border-slate-100 mb-6">
+          <div class="px-5 py-3 border-b border-slate-100">
+            <h3 class="text-sm font-bold text-slate-700 flex items-center gap-2">
+              <Zap :size="14" class="text-violet-500" /> En Basarili Algoritma Kombinasyonlari
+            </h3>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="text-left text-xs text-slate-500 border-b border-slate-100">
+                  <th class="px-5 py-2.5 font-medium">#</th>
+                  <th class="px-5 py-2.5 font-medium">Atama</th>
+                  <th class="px-5 py-2.5 font-medium">Rotalama</th>
+                  <th class="px-5 py-2.5 font-medium">Optimizasyon</th>
+                  <th class="px-5 py-2.5 font-medium text-center">Kullanim</th>
+                  <th class="px-5 py-2.5 font-medium text-center">Ort. Puan</th>
+                  <th class="px-5 py-2.5 font-medium text-center">Kurye Puan</th>
+                  <th class="px-5 py-2.5 font-medium text-center">En Iyi</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(combo, ci) in algoStatsComputed.topCombos" :key="ci" class="border-b border-slate-50 hover:bg-slate-50/50">
+                  <td class="px-5 py-2.5">
+                    <span class="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold"
+                      :class="ci === 0 ? 'bg-violet-100 text-violet-700' : 'bg-slate-100 text-slate-500'">{{ ci + 1 }}</span>
+                  </td>
+                  <td class="px-5 py-2.5 font-medium text-slate-700">{{ algoNames[combo.assignment] || combo.assignment }}</td>
+                  <td class="px-5 py-2.5 text-slate-600">{{ algoNames[combo.routing] || combo.routing }}</td>
+                  <td class="px-5 py-2.5 text-slate-600">{{ algoNames[combo.optimization] || combo.optimization }}</td>
+                  <td class="px-5 py-2.5 text-center">
+                    <span class="px-2 py-0.5 bg-slate-100 rounded-full text-xs font-medium text-slate-600">{{ combo.count }}x</span>
+                  </td>
+                  <td class="px-5 py-2.5 text-center">
+                    <span class="font-bold" :class="parseFloat(combo.avgScore) >= 8 ? 'text-emerald-600' : parseFloat(combo.avgScore) >= 6 ? 'text-amber-600' : 'text-red-600'">{{ combo.avgScore }}</span>
+                  </td>
+                  <td class="px-5 py-2.5 text-center">
+                    <span class="font-bold" :class="combo.avgCourierScore !== '-' && parseFloat(combo.avgCourierScore) >= 8 ? 'text-emerald-600' : combo.avgCourierScore !== '-' && parseFloat(combo.avgCourierScore) >= 6 ? 'text-amber-600' : 'text-slate-400'">{{ combo.avgCourierScore }}</span>
+                  </td>
+                  <td class="px-5 py-2.5 text-center">
+                    <span class="font-bold" :class="combo.bestScore >= 8 ? 'text-emerald-600' : combo.bestScore >= 6 ? 'text-amber-600' : 'text-red-600'">{{ combo.bestScore }}/10</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Profil Bazli Ogrenme -->
+        <div class="bg-white rounded-xl border border-slate-100 mb-6">
+          <div class="px-5 py-3 border-b border-slate-100">
+            <h3 class="text-sm font-bold text-slate-700 flex items-center gap-2">
+              <Target :size="14" class="text-emerald-500" /> Siparis Profiline Gore En Iyi Strateji
+            </h3>
+            <p class="text-xs text-slate-400 mt-0.5">Her siparis dagilimine ozel ogrenen en iyi kombinasyon</p>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="text-left text-xs text-slate-500 border-b border-slate-100">
+                  <th class="px-5 py-2.5 font-medium">Profil</th>
+                  <th class="px-5 py-2.5 font-medium">Atama → Rotalama → Optimizasyon</th>
+                  <th class="px-5 py-2.5 font-medium text-center">Puan</th>
+                  <th class="px-5 py-2.5 font-medium text-center">Rota</th>
+                  <th class="px-5 py-2.5 font-medium text-center">Toplam Km</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(p, pi) in algoStatsComputed.profileBest" :key="pi" class="border-b border-slate-50 hover:bg-slate-50/50">
+                  <td class="px-5 py-2.5">
+                    <span class="px-2 py-0.5 bg-violet-50 text-violet-700 rounded-md text-xs font-mono font-medium">{{ p.profile }}</span>
+                  </td>
+                  <td class="px-5 py-2.5 text-slate-600 text-xs">
+                    <span class="font-medium text-slate-700">{{ algoNames[p.combo.assignment] || p.combo.assignment }}</span>
+                    <span class="text-slate-300 mx-1">→</span>
+                    <span>{{ algoNames[p.combo.routing] || p.combo.routing }}</span>
+                    <span class="text-slate-300 mx-1">→</span>
+                    <span>{{ algoNames[p.combo.optimization] || p.combo.optimization }}</span>
+                  </td>
+                  <td class="px-5 py-2.5 text-center">
+                    <span class="font-bold" :class="p.score >= 8 ? 'text-emerald-600' : p.score >= 6 ? 'text-amber-600' : 'text-red-600'">{{ p.score }}/10</span>
+                  </td>
+                  <td class="px-5 py-2.5 text-center font-medium text-slate-700">{{ p.totalRoutes }}</td>
+                  <td class="px-5 py-2.5 text-center text-slate-500">{{ p.totalKm?.toFixed(1) || '-' }} km</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Son Deneyimler -->
+        <div class="bg-white rounded-xl border border-slate-100">
+          <div class="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
+            <h3 class="text-sm font-bold text-slate-700 flex items-center gap-2">
+              <Clock :size="14" class="text-blue-500" /> Son Deneyimler
+            </h3>
+            <button @click="algoHistory = []; localStorage.setItem('bringo_algo_learning', '[]')"
+              class="text-xs text-slate-400 hover:text-red-500 cursor-pointer transition-colors">Gecmisi Temizle</button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="text-left text-xs text-slate-500 border-b border-slate-100">
+                  <th class="px-5 py-2.5 font-medium">Tarih</th>
+                  <th class="px-5 py-2.5 font-medium">Profil</th>
+                  <th class="px-5 py-2.5 font-medium">Pipeline</th>
+                  <th class="px-5 py-2.5 font-medium text-center">Siparis</th>
+                  <th class="px-5 py-2.5 font-medium text-center">Rota</th>
+                  <th class="px-5 py-2.5 font-medium text-center">Puan</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(entry, ei) in [...algoHistory].reverse().slice(0, 50)" :key="ei" class="border-b border-slate-50 hover:bg-slate-50/50">
+                  <td class="px-5 py-2.5 text-xs text-slate-500">{{ new Date(entry.ts).toLocaleDateString('tr-TR') }} {{ new Date(entry.ts).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) }}</td>
+                  <td class="px-5 py-2.5">
+                    <span class="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] font-mono text-slate-600">{{ entry.profile }}</span>
+                  </td>
+                  <td class="px-5 py-2.5 text-xs text-slate-600">
+                    {{ algoNames[entry.combo.assignment] || entry.combo.assignment }}
+                    → {{ algoNames[entry.combo.routing] || entry.combo.routing }}
+                    → {{ algoNames[entry.combo.optimization] || entry.combo.optimization }}
+                  </td>
+                  <td class="px-5 py-2.5 text-center text-slate-700 font-medium">{{ entry.totalOrders }}</td>
+                  <td class="px-5 py-2.5 text-center text-slate-700 font-medium">{{ entry.totalRoutes }}</td>
+                  <td class="px-5 py-2.5 text-center">
+                    <span class="px-2 py-0.5 rounded-full text-xs font-bold"
+                      :class="entry.score >= 8 ? 'bg-emerald-50 text-emerald-700' : entry.score >= 6 ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-700'">
+                      {{ entry.score }}/10
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </template>
+
+      <!-- Bos state -->
+      <div v-else class="text-center py-16">
+        <Cpu :size="40" class="mx-auto mb-3 text-slate-300" />
+        <h3 class="text-lg font-bold text-slate-600 mb-1">Henuz ogrenme verisi yok</h3>
+        <p class="text-sm text-slate-400">Algoritma simulatorde dispatch yaparak AI ogrenme gecmisini olusturun.</p>
+        <p class="text-xs text-slate-400 mt-2">Dashboard → Simulator → AI Pilot acik → Dispatch Et</p>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -800,14 +989,17 @@ import { useRouter } from 'vue-router'
 import {
   FileBarChart, ClipboardList, Truck, Package, Users, DollarSign,
   TrendingUp, Download, Clock, Star, Building2, MapPin, Wallet,
-  CheckCircle, XCircle, ShieldAlert
+  CheckCircle, XCircle, ShieldAlert, Cpu, Zap, Target, BarChart3
 } from 'lucide-vue-next'
 import { formatCurrency, formatNumber } from '@/utils'
+import { getOrders, getStats, getCouriers } from '@/services/api'
 
 const router = useRouter()
 const dateRange = ref('month')
 const activeTab = ref('zimmet')
 const karlilikTab = ref('proje')
+const loading = ref(false)
+const error = ref(null)
 
 const tabs = [
   { id: 'zimmet', label: 'Kurye Zimmet', icon: ClipboardList },
@@ -815,6 +1007,7 @@ const tabs = [
   { id: 'siparis', label: 'Siparis Raporu', icon: Package },
   { id: 'musteri', label: 'Musteri Raporu', icon: Users },
   { id: 'karlilik', label: 'Karlilik', icon: TrendingUp },
+  { id: 'algoritma', label: 'Algoritma AI', icon: Cpu },
 ]
 
 const karlilikSubTabs = [
@@ -822,6 +1015,64 @@ const karlilikSubTabs = [
   { id: 'sube', label: 'Sube Bazli' },
   { id: 'kurye', label: 'Kurye Bazli' },
 ]
+
+// ==================== ALGORITMA AI OGRENME RAPORU ====================
+const algoHistory = ref([])
+const algoHistoryLoaded = ref(false)
+
+function loadAlgoHistory() {
+  if (algoHistoryLoaded.value) return
+  try {
+    algoHistory.value = JSON.parse(localStorage.getItem('bringo_algo_learning') || '[]')
+  } catch { algoHistory.value = [] }
+  algoHistoryLoaded.value = true
+}
+
+const algoNames = {
+  hungarian: 'Hungarian', greedy_nearest: 'Greedy Nearest', auction: 'Auction',
+  zone_cascade: 'Zone Cascade', batch_dispatch: 'Batch Dispatch', multi_objective: 'Multi-Objective',
+  clarke_wright: 'Clarke-Wright', or_tools_vrp: 'OR-Tools VRP', vroom_solver: 'VROOM',
+  '2opt': '2-Opt', '3opt': '3-Opt', simulated_annealing: 'Sim. Annealing',
+  genetic: 'Genetic', ant_colony: 'Ant Colony', bringo_adaptive: 'Bringo Adaptive',
+}
+
+const algoStatsComputed = computed(() => {
+  const h = algoHistory.value
+  if (h.length === 0) return null
+  const scores = h.map(x => x.score)
+  const avgScore = (scores.reduce((a,b) => a+b, 0) / scores.length).toFixed(1)
+  const bestScore = Math.max(...scores)
+  const worstScore = Math.min(...scores)
+
+  // En cok kullanilan combolar
+  const comboCount = {}
+  h.forEach(x => {
+    const key = `${x.combo.assignment}|${x.combo.routing}|${x.combo.optimization}`
+    comboCount[key] = (comboCount[key] || 0) + 1
+  })
+  const topCombos = Object.entries(comboCount).sort((a,b) => b[1] - a[1]).slice(0, 5).map(([key, count]) => {
+    const [a, r, o] = key.split('|')
+    const entries = h.filter(x => x.combo.assignment === a && x.combo.routing === r && x.combo.optimization === o)
+    const comboScores = entries.map(x => x.score)
+    const courierScores = entries.filter(x => x.courierScore).map(x => x.courierScore)
+    const avg = (comboScores.reduce((s,v) => s+v, 0) / comboScores.length).toFixed(1)
+    const avgCourier = courierScores.length > 0 ? (courierScores.reduce((s,v) => s+v, 0) / courierScores.length).toFixed(1) : '-'
+    return { assignment: a, routing: r, optimization: o, count, avgScore: avg, bestScore: Math.max(...comboScores), avgCourierScore: avgCourier }
+  })
+
+  // Profil bazli en iyiler
+  const profileBest = {}
+  h.forEach(x => {
+    if (!profileBest[x.profile] || x.score > profileBest[x.profile].score) {
+      profileBest[x.profile] = x
+    }
+  })
+
+  // Zaman trendi — son 20 kayit
+  const recent = h.slice(-20).map((x, i) => ({ idx: i, score: x.score, ts: x.ts }))
+
+  return { total: h.length, avgScore, bestScore, worstScore, topCombos, profileBest: Object.values(profileBest), recent }
+})
 
 // ==================== KURYE ISIMLERI (ORTAK) ====================
 const courierNames = [
@@ -933,7 +1184,7 @@ const karlilikKuryeToplamMarj = computed(() => {
 })
 
 // ==================== MOCK DATA URETICI ====================
-onMounted(() => {
+const generateMockData = () => {
   // Tab 1: Zimmet — kuryenin uzerindeki siparisler, urunler ve nakit
   const productPool = [
     'Laptop', 'Tablet', 'Telefon', 'Kulaklik', 'Sarj Aleti', 'Klavye',
@@ -1179,5 +1430,114 @@ onMounted(() => {
       rating: (Math.random() * 1.2 + 3.8).toFixed(1),
     }
   }).sort((a, b) => b.netProfit - a.netProfit)
+}
+
+onMounted(async () => {
+  loading.value = true
+  error.value = null
+  try {
+    const [ordersRes, statsRes, couriersRes] = await Promise.all([
+      getOrders(),
+      getStats(),
+      getCouriers(),
+    ])
+
+    if (ordersRes.ok && ordersRes.data) {
+      const orders = Array.isArray(ordersRes.data) ? ordersRes.data : ordersRes.data?.orders || []
+      const couriers = couriersRes.ok ? (Array.isArray(couriersRes.data) ? couriersRes.data : couriersRes.data?.couriers || []) : []
+
+      // Tab 3: Siparis - use real orders
+      if (orders.length > 0) {
+        siparisData.value = orders.map((o, i) => {
+          const status = o.status || 'pending'
+          return {
+            id: o.id || o.externalOrderId || `SIP-${i}`,
+            dbId: o._id || i,
+            orderNo: o.externalOrderId || o.id || `SIP-${i}`,
+            refNo: o.refNo || `REF-${i}`,
+            project: o.project || o.tenantId || '',
+            region: o.region || '',
+            dropId: o.dropId || '',
+            dropRefId: o.dropRefId || '',
+            dropName: o.dropName || o.dropoff?.name || '',
+            customer: o.customer?.name || o.customerName || '',
+            customerPhone: o.customer?.phone || o.customerPhone || '',
+            plannedDelivery: o.plannedDelivery || '',
+            status,
+            statusConfig: siparisStatusConfig[status] || siparisStatusConfig.pending,
+            cancelReason: o.cancelReason || null,
+            failReason: o.failReason || null,
+            failNote: o.failNote || null,
+            failType: o.failType || null,
+            orderDate: o.createdAt ? new Date(o.createdAt).toLocaleDateString('tr-TR') : '',
+            courierDeliveryDate: o.deliveredAt || null,
+            customerDeliveryDate: o.customerDeliveryDate || null,
+            deliveryDuration: o.deliveryDuration || null,
+            estimatedSales: o.estimatedSales || o.price || 0,
+            totalAmount: o.totalAmount || o.price || 0,
+            totalCashPos: o.totalCashPos || 0,
+            estimatedKdv: o.estimatedKdv || 0,
+            estimatedProfit: o.estimatedProfit || 0,
+            deliveryCoord: o.deliveryCoord || '',
+            deliveryPlate: o.deliveryPlate || '',
+          }
+        })
+
+        const deliveredOrders = siparisData.value.filter(r => r.status === 'delivered')
+        siparisKpis.value = {
+          toplam: siparisData.value.length,
+          teslimEdilen: deliveredOrders.length,
+          basarisiz: siparisData.value.filter(r => r.status === 'failed' || r.status === 'cancelled').length,
+          ortSure: deliveredOrders.length > 0 ? Math.round(deliveredOrders.reduce((s, r) => s + (r.deliveryDuration || 0), 0) / deliveredOrders.length) : 0,
+        }
+      }
+
+      // Tab 1: Zimmet - compute from couriers if available
+      if (couriers.length > 0) {
+        zimmetData.value = couriers.map((c, i) => {
+          const courierOrders = orders.filter(o => o.courierId === c.id || o.courierId === c._id)
+          const activeOrders = courierOrders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled')
+          return {
+            id: c.id || c._id || `z-${i}`,
+            courier: c.name || `Kurye ${i + 1}`,
+            phone: c.phone || '',
+            orders: activeOrders.map(o => ({
+              id: o.id || o.externalOrderId || '',
+              customer: o.customer?.name || o.customerName || '',
+              items: o.items || [],
+            })),
+            nakitZimmet: c.cashOnHand || 0,
+            durum: activeOrders.length > 0 ? 'dagitimda' : 'bos',
+          }
+        })
+
+        const allZimmetOrders = zimmetData.value.flatMap(r => r.orders)
+        zimmetKpis.value = {
+          toplamSiparis: allZimmetOrders.length,
+          toplamUrun: allZimmetOrders.reduce((s, o) => s + (o.items?.length || 0), 0),
+          toplamNakit: zimmetData.value.reduce((s, r) => s + r.nakitZimmet, 0),
+          nakitliKurye: zimmetData.value.filter(r => r.nakitZimmet > 0).length,
+        }
+      }
+
+      // If no data was populated, use mock
+      if (siparisData.value.length === 0 && zimmetData.value.length === 0) {
+        generateMockData()
+      } else {
+        // Generate remaining mock data for tabs not covered by API
+        if (zimmetData.value.length === 0 || hakedisData.value.length === 0 || musteriData.value.length === 0 || karlilikProjeData.value.length === 0) {
+          generateMockData()
+        }
+      }
+    } else {
+      generateMockData()
+    }
+  } catch (e) {
+    console.error('[Reports] API error:', e)
+    error.value = 'Veriler yuklenirken hata olustu'
+    generateMockData()
+  } finally {
+    loading.value = false
+  }
 })
 </script>

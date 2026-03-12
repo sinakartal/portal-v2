@@ -142,7 +142,7 @@
               <td class="px-4 py-3 text-slate-500">{{ formatDate(project.createdAt) }}</td>
               <td class="px-4 py-3">
                 <div class="flex justify-center gap-1">
-                  <button class="p-1.5 hover:bg-slate-100 rounded cursor-pointer" title="Detay">
+                  <button @click="openProjectDetail(project)" class="p-1.5 hover:bg-slate-100 rounded cursor-pointer" title="Detay">
                     <Eye :size="14" class="text-slate-500" />
                   </button>
                   <button class="p-1.5 hover:bg-slate-100 rounded cursor-pointer" title="Duzenle">
@@ -178,6 +178,100 @@
         </div>
       </div>
     </div>
+
+    <!-- Project Detail Modal -->
+    <Teleport to="body">
+      <div v-if="showProjectModal && selectedProject" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" @click.self="showProjectModal = false">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] overflow-hidden">
+          <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+            <div>
+              <h2 class="text-lg font-bold text-slate-800">{{ selectedProject.name }}</h2>
+              <p class="text-sm text-slate-500">{{ selectedProject.client }} - {{ selectedProject.code }}</p>
+            </div>
+            <button @click="showProjectModal = false" class="p-2 hover:bg-slate-100 rounded-lg cursor-pointer">
+              <X :size="18" class="text-slate-500" />
+            </button>
+          </div>
+          <div class="p-6 overflow-y-auto max-h-[65vh] space-y-6">
+            <!-- Branches Section -->
+            <div>
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                  <GitBranch :size="15" class="text-slate-500" />
+                  Subeler ({{ selectedProject.branches.length }})
+                </h3>
+                <button @click="showAddBranch = !showAddBranch" class="flex items-center gap-1 px-3 py-1.5 bg-primary text-white rounded-lg text-xs font-medium cursor-pointer">
+                  <Plus :size="13" /> Sube Ekle
+                </button>
+              </div>
+
+              <!-- Add Branch Form -->
+              <div v-if="showAddBranch" class="bg-blue-50 rounded-lg p-3 mb-3">
+                <div class="grid grid-cols-2 gap-2">
+                  <input v-model="newBranch.name" placeholder="Sube adi" class="px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+                  <input v-model="newBranch.address" placeholder="Adres" class="px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+                </div>
+                <div class="flex gap-2 mt-2">
+                  <button @click="handleAddBranch" class="px-3 py-1.5 bg-primary text-white rounded-lg text-xs font-medium cursor-pointer">Ekle</button>
+                  <button @click="showAddBranch = false" class="px-3 py-1.5 bg-slate-100 text-slate-600 rounded-lg text-xs font-medium cursor-pointer">Iptal</button>
+                </div>
+              </div>
+
+              <div class="space-y-2">
+                <div v-for="branch in selectedProject.branches" :key="branch.id" class="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+                  <div class="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center">
+                    <MapPin :size="14" class="text-indigo-500" />
+                  </div>
+                  <div class="flex-1">
+                    <p class="text-sm font-medium text-slate-700">{{ branch.name }}</p>
+                    <p class="text-xs text-slate-500">{{ branch.address }}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Couriers Section -->
+            <div>
+              <h3 class="text-sm font-semibold text-slate-700 flex items-center gap-2 mb-3">
+                <Truck :size="15" class="text-slate-500" />
+                Atanan Kuryeler ({{ selectedProject.couriers.length }})
+              </h3>
+
+              <!-- Assigned Couriers -->
+              <div v-if="selectedProject.couriers.length > 0" class="space-y-2 mb-3">
+                <div v-for="courier in selectedProject.couriers" :key="courier.id" class="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
+                  <div class="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                    <Truck :size="14" class="text-green-600" />
+                  </div>
+                  <div class="flex-1">
+                    <p class="text-sm font-medium text-slate-700">{{ courier.name }}</p>
+                  </div>
+                  <button @click="handleRemoveCourier(courier.id)" class="p-1.5 hover:bg-red-50 rounded cursor-pointer">
+                    <Trash2 :size="13" class="text-red-400" />
+                  </button>
+                </div>
+              </div>
+              <p v-else class="text-xs text-slate-400 mb-3">Henuz kurye atanmadi</p>
+
+              <!-- Available Couriers to Add -->
+              <div v-if="availableCouriers.length > 0">
+                <p class="text-xs text-slate-500 mb-2">Kurye Ata:</p>
+                <div class="flex flex-wrap gap-2">
+                  <button
+                    v-for="courier in availableCouriers.filter(c => !selectedProject.couriers.find(sc => sc.id === c.id))"
+                    :key="courier.id"
+                    @click="handleAssignCourier(courier.id)"
+                    class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-indigo-50 rounded-full text-xs text-slate-600 hover:text-indigo-600 transition-colors cursor-pointer"
+                  >
+                    <UserPlus :size="12" /> {{ courier.name }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -187,9 +281,9 @@ import { useRouter } from 'vue-router'
 import {
   Plus, Search, RefreshCw, Edit2, Eye, Building2, Package, TrendingUp,
   ChevronLeft, ChevronRight, CheckCircle, XCircle, BarChart3, Target,
-  DollarSign
+  DollarSign, MapPin, Truck, X, UserPlus, Trash2, GitBranch
 } from 'lucide-vue-next'
-import { generateProjects } from '@/services/mockData'
+import { getProjects, addBranch, assignCourier, removeCourier, getCouriers } from '@/services/api'
 import { formatCurrency, formatNumber, formatDate } from '@/utils'
 
 const router = useRouter()
@@ -199,11 +293,26 @@ const search = ref('')
 const statusFilter = ref('')
 const currentPage = ref(1)
 const perPage = 20
+const loading = ref(false)
+const error = ref(null)
 
-onMounted(() => {
-  const data = generateProjects()
-  projects.value = data
-  filtered.value = data
+onMounted(async () => {
+  loading.value = true
+  error.value = null
+  try {
+    const res = await getProjects()
+    if (res.ok) {
+      const data = Array.isArray(res.data) ? res.data : res.data?.projects || []
+      projects.value = data
+      filtered.value = data
+    } else {
+      error.value = 'Projeler yuklenemedi'
+    }
+  } catch (e) {
+    error.value = e.message || 'Veri yuklenirken hata olustu'
+  } finally {
+    loading.value = false
+  }
 })
 
 watch([search, statusFilter, projects], () => {
@@ -251,4 +360,56 @@ const paginationPages = computed(() => {
   }
   return pages
 })
+
+// Branch & Courier Management
+const showProjectModal = ref(false)
+const selectedProject = ref(null)
+const availableCouriers = ref([])
+const newBranch = ref({ name: '', address: '', lat: 0, lng: 0 })
+const showAddBranch = ref(false)
+
+async function openProjectDetail(project) {
+  selectedProject.value = {
+    ...project,
+    branches: project.branches || [
+      { id: 'b1', name: 'Merkez Depo', address: 'Kadikoy, Istanbul', lat: 40.98, lng: 29.03 },
+      { id: 'b2', name: 'Sube 2', address: 'Besiktas, Istanbul', lat: 41.04, lng: 29.00 },
+    ],
+    couriers: project.couriers || [],
+  }
+  showProjectModal.value = true
+
+  const res = await getCouriers()
+  if (res.ok) {
+    const raw = Array.isArray(res.data) ? res.data : res.data?.couriers || []
+    availableCouriers.value = raw.map(c => ({
+      id: c.id || c.courierId,
+      name: c.name || `Kurye ${c.id}`,
+      status: c.status || 'active',
+    }))
+  }
+}
+
+async function handleAddBranch() {
+  if (!selectedProject.value || !newBranch.value.name) return
+  await addBranch(selectedProject.value._id || selectedProject.value.code, newBranch.value)
+  selectedProject.value.branches.push({ id: `b-${Date.now()}`, ...newBranch.value })
+  newBranch.value = { name: '', address: '', lat: 0, lng: 0 }
+  showAddBranch.value = false
+}
+
+async function handleAssignCourier(courierId) {
+  if (!selectedProject.value) return
+  await assignCourier(selectedProject.value._id || selectedProject.value.code, courierId)
+  const courier = availableCouriers.value.find(c => c.id === courierId)
+  if (courier && !selectedProject.value.couriers.find(c => c.id === courierId)) {
+    selectedProject.value.couriers.push(courier)
+  }
+}
+
+async function handleRemoveCourier(courierId) {
+  if (!selectedProject.value) return
+  await removeCourier(selectedProject.value._id || selectedProject.value.code, courierId)
+  selectedProject.value.couriers = selectedProject.value.couriers.filter(c => c.id !== courierId)
+}
 </script>

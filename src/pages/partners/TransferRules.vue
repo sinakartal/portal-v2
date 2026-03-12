@@ -1,19 +1,19 @@
 <template>
-  <div class="min-h-screen bg-slate-50 p-6">
+  <div class="min-h-screen bg-slate-50 dark:bg-slate-900 p-6">
     <!-- Header -->
     <div class="flex items-center justify-between mb-8">
       <div class="flex items-center gap-4">
         <button
           @click="router.push('/partners')"
-          class="p-2 rounded-lg hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-200 transition-all"
+          class="p-2 rounded-lg hover:bg-white dark:hover:bg-slate-800 hover:shadow-sm border border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition-all"
         >
-          <ArrowLeft class="w-5 h-5 text-slate-600" />
+          <ArrowLeft class="w-5 h-5 text-slate-600 dark:text-slate-300" />
         </button>
         <div>
-          <h1 class="text-2xl font-bold text-slate-800">
+          <h1 class="text-2xl font-bold text-slate-800 dark:text-white">
             Otomatik Aktarim Kurallari
           </h1>
-          <p class="text-sm text-slate-500 mt-0.5">
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
             Partner aktarim kurallarini yonetin
           </p>
         </div>
@@ -28,10 +28,10 @@
     </div>
 
     <!-- General Settings Card -->
-    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+    <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 mb-6">
       <div class="flex items-center gap-2 mb-5">
-        <Settings class="w-5 h-5 text-slate-500" />
-        <h2 class="text-lg font-semibold text-slate-800">
+        <Settings class="w-5 h-5 text-slate-500 dark:text-slate-400" />
+        <h2 class="text-lg font-semibold text-slate-800 dark:text-white">
           Genel Ayarlar
         </h2>
       </div>
@@ -46,10 +46,10 @@
             class="flex items-center gap-3 group"
           >
             <ToggleRight v-if="autoTransfer" class="w-8 h-8 text-green-500 group-hover:text-green-600 transition-colors" />
-            <ToggleLeft v-else class="w-8 h-8 text-slate-300 group-hover:text-slate-400 transition-colors" />
-            <span class="text-sm text-slate-700">
+            <ToggleLeft v-else class="w-8 h-8 text-slate-300 dark:text-slate-600 group-hover:text-slate-400 transition-colors" />
+            <span class="text-sm text-slate-700 dark:text-slate-300">
               Otomatik aktarim:
-              <span :class="['font-semibold', autoTransfer ? 'text-green-600' : 'text-slate-400']">
+              <span :class="['font-semibold', autoTransfer ? 'text-green-600' : 'text-slate-400 dark:text-slate-500']">
                 {{ autoTransfer ? 'Acik' : 'Kapali' }}
               </span>
             </span>
@@ -62,23 +62,23 @@
             class="flex items-center gap-3 group"
           >
             <ToggleRight v-if="fallbackEnabled" class="w-8 h-8 text-green-500 group-hover:text-green-600 transition-colors" />
-            <ToggleLeft v-else class="w-8 h-8 text-slate-300 group-hover:text-slate-400 transition-colors" />
-            <span class="text-sm text-slate-700">Fallback: Bringo kurye musait degilse aktar</span>
+            <ToggleLeft v-else class="w-8 h-8 text-slate-300 dark:text-slate-600 group-hover:text-slate-400 transition-colors" />
+            <span class="text-sm text-slate-700 dark:text-slate-300">Fallback: Bringo kurye musait degilse aktar</span>
           </button>
 
           <!-- Min SLA -->
           <div class="flex items-center gap-3">
-            <label class="text-sm text-slate-700 whitespace-nowrap">
+            <label class="text-sm text-slate-700 dark:text-slate-300 whitespace-nowrap">
               Min SLA:
             </label>
             <div class="flex items-center gap-2">
-              <span class="text-sm text-slate-500">%</span>
+              <span class="text-sm text-slate-500 dark:text-slate-400">%</span>
               <input
                 type="number"
                 v-model.number="minSla"
-                class="w-20 px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                class="w-20 px-3 py-1.5 border border-slate-200 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
-              <span class="text-sm text-slate-500">
+              <span class="text-sm text-slate-500 dark:text-slate-400">
                 alti partnere aktarma
               </span>
             </div>
@@ -87,23 +87,23 @@
 
         <!-- Right Column - Priority Order -->
         <div>
-          <p class="text-sm font-medium text-slate-600 mb-3">
+          <p class="text-sm font-medium text-slate-600 dark:text-slate-400 mb-3">
             Oncelik Siralamasi
           </p>
           <div class="space-y-2">
             <div
               v-for="(partner, index) in priorities"
               :key="partner.id"
-              class="flex items-center gap-3 px-3 py-2.5 bg-slate-50 rounded-lg border border-slate-100 group hover:border-slate-200 transition-colors"
+              class="flex items-center gap-3 px-3 py-2.5 bg-slate-50 dark:bg-slate-700/50 rounded-lg border border-slate-100 dark:border-slate-600 group hover:border-slate-200 dark:hover:border-slate-500 transition-colors"
             >
-              <GripVertical class="w-4 h-4 text-slate-300 cursor-grab group-hover:text-slate-400 transition-colors" />
-              <span class="w-6 h-6 flex items-center justify-center bg-white rounded-full text-xs font-bold text-slate-500 border border-slate-200">
+              <GripVertical class="w-4 h-4 text-slate-300 dark:text-slate-500 cursor-grab group-hover:text-slate-400 transition-colors" />
+              <span class="w-6 h-6 flex items-center justify-center bg-white dark:bg-slate-600 rounded-full text-xs font-bold text-slate-500 dark:text-slate-300 border border-slate-200 dark:border-slate-500">
                 {{ index + 1 }}
               </span>
-              <span class="text-sm font-medium text-slate-700">
+              <span class="text-sm font-medium text-slate-700 dark:text-slate-200">
                 {{ partner.name }}
               </span>
-              <span v-if="index < priorities.length - 1" class="text-slate-300 text-xs ml-auto">
+              <span v-if="index < priorities.length - 1" class="text-slate-300 dark:text-slate-600 text-xs ml-auto">
                 &rarr;
               </span>
             </div>
@@ -115,23 +115,23 @@
     <!-- Rules List -->
     <div class="space-y-4">
       <div class="flex items-center justify-between">
-        <h2 class="text-lg font-semibold text-slate-800">
+        <h2 class="text-lg font-semibold text-slate-800 dark:text-white">
           Aktarim Kurallari
         </h2>
-        <span class="text-sm text-slate-500">
+        <span class="text-sm text-slate-500 dark:text-slate-400">
           {{ rules.filter(r => r.active).length }} aktif /
           {{ rules.length }} toplam
         </span>
       </div>
 
       <div
-        v-for="rule in rules"
+        v-for="(rule, ruleIndex) in rules"
         :key="rule.id"
         :class="[
-          'bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden transition-all hover:shadow-md',
+          'bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden transition-all hover:shadow-md',
           rule.active
             ? 'border-l-4 border-l-green-500'
-            : 'border-l-4 border-l-slate-300'
+            : 'border-l-4 border-l-slate-300 dark:border-l-slate-600'
         ]"
       >
         <div class="p-5">
@@ -150,9 +150,19 @@
                 />
               </div>
               <div>
-                <h3 class="font-semibold text-slate-800">
-                  {{ rule.name }}
-                </h3>
+                <div class="flex items-center gap-2">
+                  <h3 class="font-semibold text-slate-800 dark:text-white">
+                    {{ rule.name }}
+                  </h3>
+                  <!-- Conflict Warning Badge -->
+                  <span
+                    v-if="hasConflict(rule, ruleIndex)"
+                    class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800"
+                  >
+                    <AlertTriangle class="w-3 h-3" />
+                    Cakisma
+                  </span>
+                </div>
                 <span
                   :class="[
                     'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium mt-1',
@@ -171,55 +181,110 @@
                 :title="rule.active ? 'Devre disi birak' : 'Aktiflestir'"
               >
                 <ToggleRight v-if="rule.active" class="w-7 h-7 text-green-500 hover:text-green-600 transition-colors" />
-                <ToggleLeft v-else class="w-7 h-7 text-slate-300 hover:text-slate-400 transition-colors" />
+                <ToggleLeft v-else class="w-7 h-7 text-slate-300 dark:text-slate-600 hover:text-slate-400 transition-colors" />
               </button>
             </div>
           </div>
 
-          <!-- Rule Details -->
-          <div class="space-y-2 mb-4">
-            <div class="flex items-start gap-2">
-              <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider w-16 pt-0.5 shrink-0">
-                Kosul
-              </span>
-              <span class="text-sm text-slate-600">
-                {{ rule.condition }}
-              </span>
+          <!-- IF -> THEN Visual Format -->
+          <div class="mb-4 bg-slate-50 dark:bg-slate-700/30 rounded-xl p-4">
+            <div class="flex items-start gap-3">
+              <!-- IF Block -->
+              <div class="flex-1">
+                <div class="flex items-center gap-2 mb-2">
+                  <span class="px-2.5 py-1 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 text-xs font-bold rounded-lg uppercase tracking-wider">
+                    IF
+                  </span>
+                  <span class="text-xs text-slate-400 dark:text-slate-500">Kosul</span>
+                </div>
+                <p class="text-sm text-slate-700 dark:text-slate-300 pl-1 font-medium">
+                  {{ rule.condition }}
+                </p>
+              </div>
+
+              <!-- Arrow -->
+              <div class="flex items-center self-center pt-4">
+                <div class="flex items-center gap-1 text-slate-300 dark:text-slate-600">
+                  <div class="w-8 h-[2px] bg-slate-300 dark:bg-slate-600" />
+                  <ChevronRight class="w-5 h-5" />
+                </div>
+              </div>
+
+              <!-- THEN Block -->
+              <div class="flex-1">
+                <div class="flex items-center gap-2 mb-2">
+                  <span class="px-2.5 py-1 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 text-xs font-bold rounded-lg uppercase tracking-wider">
+                    THEN
+                  </span>
+                  <span class="text-xs text-slate-400 dark:text-slate-500">Aksiyon</span>
+                </div>
+                <p class="text-sm text-slate-700 dark:text-slate-300 pl-1 font-medium">
+                  {{ rule.action }}
+                </p>
+              </div>
             </div>
-            <div class="flex items-start gap-2">
-              <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider w-16 pt-0.5 shrink-0">
-                Aksiyon
-              </span>
-              <span class="text-sm text-slate-700 font-medium">
-                {{ rule.action }}
-              </span>
-            </div>
-            <div v-if="rule.extra" class="flex items-start gap-2">
-              <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider w-16 pt-0.5 shrink-0">
-                {{ rule.extra.label }}
-              </span>
-              <span class="text-sm text-slate-600">
-                {{ rule.extra.value }}
-              </span>
+
+            <!-- Extra info -->
+            <div v-if="rule.extra" class="mt-3 pt-3 border-t border-slate-200 dark:border-slate-600">
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300 text-xs font-semibold rounded">
+                  {{ rule.extra.label }}
+                </span>
+                <span class="text-sm text-slate-600 dark:text-slate-400">
+                  {{ rule.extra.value }}
+                </span>
+              </div>
             </div>
           </div>
 
           <!-- Rule Actions -->
-          <div class="flex items-center gap-2 pt-3 border-t border-slate-100">
+          <div class="flex items-center gap-2 pt-3 border-t border-slate-100 dark:border-slate-700">
+            <button
+              @click="handleTestRule(rule)"
+              :class="[
+                'flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-colors',
+                testingRuleId === rule.id
+                  ? 'text-blue-700 bg-blue-50 dark:text-blue-400 dark:bg-blue-900/30'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:text-blue-400 dark:hover:bg-blue-900/30'
+              ]"
+            >
+              <PlayCircle class="w-3.5 h-3.5" />
+              {{ testingRuleId === rule.id ? 'Test Ediliyor...' : 'Test Et' }}
+            </button>
             <button
               @click="openEditModal(rule)"
-              class="flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              class="flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-600 dark:text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:text-blue-400 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
             >
               <Edit class="w-3.5 h-3.5" />
               Duzenle
             </button>
             <button
               @click="deleteRule(rule.id)"
-              class="flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              class="flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-600 dark:text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-900/30 rounded-lg transition-colors"
             >
               <Trash2 class="w-3.5 h-3.5" />
               Sil
             </button>
+          </div>
+
+          <!-- Test Result -->
+          <div
+            v-if="testResults[rule.id]"
+            class="mt-3 p-3 rounded-lg border"
+            :class="testResults[rule.id].match
+              ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+              : 'bg-slate-50 dark:bg-slate-700/30 border-slate-200 dark:border-slate-600'"
+          >
+            <div class="flex items-center gap-2 mb-1">
+              <CheckCircle v-if="testResults[rule.id].match" class="w-4 h-4 text-green-600" />
+              <XCircle v-else class="w-4 h-4 text-slate-400" />
+              <span class="text-sm font-semibold" :class="testResults[rule.id].match ? 'text-green-700 dark:text-green-400' : 'text-slate-600 dark:text-slate-400'">
+                {{ testResults[rule.id].match ? 'Kural tetiklenir' : 'Kural tetiklenmez' }}
+              </span>
+            </div>
+            <p class="text-xs text-slate-500 dark:text-slate-400 ml-6">
+              Ornek siparis: {{ testResults[rule.id].sampleOrder }} - {{ testResults[rule.id].reason }}
+            </p>
           </div>
         </div>
       </div>
@@ -227,45 +292,41 @@
 
     <!-- Create / Edit Rule Modal -->
     <div v-if="modalOpen" class="fixed inset-0 z-50 flex items-center justify-center">
-      <!-- Backdrop -->
       <div
         class="absolute inset-0 bg-black/40 backdrop-blur-sm"
         @click="closeModal"
       />
 
-      <!-- Modal Content -->
-      <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
-        <!-- Modal Header -->
-        <div class="flex items-center justify-between p-6 border-b border-slate-200">
-          <h2 class="text-lg font-bold text-slate-800">
+      <div class="relative bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto border border-slate-200 dark:border-slate-700">
+        <div class="flex items-center justify-between p-6 border-b border-slate-200 dark:border-slate-700">
+          <h2 class="text-lg font-bold text-slate-800 dark:text-white">
             {{ editingRule ? 'Kurali Duzenle' : 'Yeni Kural Olustur' }}
           </h2>
           <button
             @click="closeModal"
-            class="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+            class="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
           >
-            <X class="w-5 h-5 text-slate-500" />
+            <X class="w-5 h-5 text-slate-500 dark:text-slate-400" />
           </button>
         </div>
 
-        <!-- Modal Body -->
         <div class="p-6 space-y-6">
           <!-- Kural Adi -->
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1.5">
+            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
               Kural Adi
             </label>
             <input
               type="text"
               v-model="modalForm.name"
               placeholder="Orn: Kapasite Asimi Kurali"
-              class="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-slate-400"
+              class="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl text-sm bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-slate-400"
             />
           </div>
 
           <!-- Kosullar -->
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-3">
+            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
               Kosullar
             </label>
             <div class="space-y-3">
@@ -277,7 +338,7 @@
                 <select
                   :value="cond.field"
                   @change="updateCondition(idx, 'field', $event.target.value)"
-                  class="flex-1 px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                  class="flex-1 px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl text-sm bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option
                     v-for="f in CONDITION_FIELDS"
@@ -290,7 +351,7 @@
                 <select
                   :value="cond.operator"
                   @change="updateCondition(idx, 'operator', $event.target.value)"
-                  class="w-40 px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                  class="w-40 px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl text-sm bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option
                     v-for="op in CONDITION_OPERATORS"
@@ -305,12 +366,12 @@
                   :value="cond.value"
                   @input="updateCondition(idx, 'value', $event.target.value)"
                   placeholder="Deger"
-                  class="w-28 px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  class="w-28 px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl text-sm bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
                 <button
                   v-if="modalForm.conditions.length > 1"
                   @click="removeCondition(idx)"
-                  class="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                  class="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                 >
                   <X class="w-4 h-4" />
                 </button>
@@ -327,17 +388,17 @@
 
           <!-- Aksiyon -->
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-3">
+            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
               Aksiyon
             </label>
             <div class="grid grid-cols-2 gap-3">
               <div>
-                <label class="block text-xs text-slate-500 mb-1">
+                <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">
                   Partner
                 </label>
                 <select
                   v-model="modalForm.partner"
-                  class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                  class="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl text-sm bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option v-for="p in PARTNER_OPTIONS" :key="p" :value="p">
                     {{ p }}
@@ -345,14 +406,14 @@
                 </select>
               </div>
               <div>
-                <label class="block text-xs text-slate-500 mb-1">
+                <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">
                   Limit (siparis/saat)
                 </label>
                 <input
                   type="number"
                   v-model="modalForm.limit"
                   placeholder="Orn: 50"
-                  class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  class="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl text-sm bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
             </div>
@@ -360,13 +421,12 @@
 
           <!-- Kisitlar -->
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-3">
+            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
               Kisitlar
             </label>
 
-            <!-- Bolge Multi-select -->
             <div class="mb-4">
-              <label class="block text-xs text-slate-500 mb-2">
+              <label class="block text-xs text-slate-500 dark:text-slate-400 mb-2">
                 Bolge
               </label>
               <div class="flex flex-wrap gap-2">
@@ -377,8 +437,8 @@
                   :class="[
                     'px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
                     modalForm.zones.includes(zone)
-                      ? 'bg-blue-50 border-blue-200 text-blue-700'
-                      : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                      ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-400'
+                      : 'bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:border-slate-300'
                   ]"
                 >
                   {{ zone }}
@@ -386,33 +446,31 @@
               </div>
             </div>
 
-            <!-- Saat Araligi -->
             <div>
-              <label class="block text-xs text-slate-500 mb-2">
+              <label class="block text-xs text-slate-500 dark:text-slate-400 mb-2">
                 Saat Araligi
               </label>
               <div class="flex items-center gap-2">
                 <input
                   type="time"
                   v-model="modalForm.timeStart"
-                  class="px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  class="px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl text-sm bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
                 <span class="text-sm text-slate-400">-</span>
                 <input
                   type="time"
                   v-model="modalForm.timeEnd"
-                  class="px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  class="px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl text-sm bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Modal Footer -->
-        <div class="flex items-center justify-end gap-3 p-6 border-t border-slate-200">
+        <div class="flex items-center justify-end gap-3 p-6 border-t border-slate-200 dark:border-slate-700">
           <button
             @click="closeModal"
-            class="px-5 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+            class="px-5 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-colors"
           >
             Iptal
           </button>
@@ -429,11 +487,13 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { evaluateTransfer } from '@/services/api'
 import {
   ArrowLeft, Settings, Plus, Zap, MapPin, Clock, Rocket,
   Edit, Trash2, GripVertical, ToggleLeft, ToggleRight, X,
+  ChevronRight, AlertTriangle, PlayCircle, CheckCircle, XCircle,
 } from 'lucide-vue-next'
 
 const router = useRouter()
@@ -483,6 +543,8 @@ const INITIAL_RULES = [
     action: 'Yeni siparisleri Trendyol Go\'ya aktar',
     extra: { label: 'Limit', value: 'Max 50 siparis/saat' },
     triggerCount: 23,
+    zones: [],
+    timeRange: null,
   },
   {
     id: 2,
@@ -494,6 +556,8 @@ const INITIAL_RULES = [
     action: 'Direkt Getir Kurye\'ye aktar',
     extra: { label: 'Neden', value: 'Bringo bu bolgelerde operasyon yok' },
     triggerCount: 8,
+    zones: ['Esenyurt', 'Silivri', 'Catalca'],
+    timeRange: null,
   },
   {
     id: 3,
@@ -505,6 +569,8 @@ const INITIAL_RULES = [
     action: '%30 siparisi Paket Taxi\'ye aktar',
     extra: null,
     triggerCount: 2,
+    zones: [],
+    timeRange: { start: '12:00', end: '14:00' },
   },
   {
     id: 4,
@@ -516,6 +582,8 @@ const INITIAL_RULES = [
     action: 'En hizli ETA veren partnere aktar',
     extra: null,
     triggerCount: 15,
+    zones: [],
+    timeRange: null,
   },
 ]
 
@@ -530,24 +598,24 @@ const iconMap = {
 
 const colorMap = {
   amber: {
-    bg: 'bg-amber-50',
-    text: 'text-amber-600',
-    badge: 'bg-amber-100 text-amber-700',
+    bg: 'bg-amber-50 dark:bg-amber-900/30',
+    text: 'text-amber-600 dark:text-amber-400',
+    badge: 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400',
   },
   blue: {
-    bg: 'bg-blue-50',
-    text: 'text-blue-600',
-    badge: 'bg-blue-100 text-blue-700',
+    bg: 'bg-blue-50 dark:bg-blue-900/30',
+    text: 'text-blue-600 dark:text-blue-400',
+    badge: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400',
   },
   purple: {
-    bg: 'bg-purple-50',
-    text: 'text-purple-600',
-    badge: 'bg-purple-100 text-purple-700',
+    bg: 'bg-purple-50 dark:bg-purple-900/30',
+    text: 'text-purple-600 dark:text-purple-400',
+    badge: 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400',
   },
   rose: {
-    bg: 'bg-rose-50',
-    text: 'text-rose-600',
-    badge: 'bg-rose-100 text-rose-700',
+    bg: 'bg-rose-50 dark:bg-rose-900/30',
+    text: 'text-rose-600 dark:text-rose-400',
+    badge: 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-400',
   },
 }
 
@@ -560,6 +628,8 @@ const priorities = ref(PRIORITY_ORDER)
 const rules = ref([...INITIAL_RULES])
 const modalOpen = ref(false)
 const editingRule = ref(null)
+const testingRuleId = ref(null)
+const testResults = ref({})
 
 const getDefaultModalForm = () => ({
   name: '',
@@ -572,6 +642,94 @@ const getDefaultModalForm = () => ({
 })
 
 const modalForm = reactive(getDefaultModalForm())
+
+// ---- Lifecycle ----
+
+onMounted(async () => {
+  const res = await evaluateTransfer()
+  if (res.ok && res.data) {
+    const apiRules = res.data.rules || res.data
+    if (Array.isArray(apiRules) && apiRules.length > 0) {
+      rules.value = apiRules.map(r => ({
+        id: r.id || Date.now(),
+        name: r.name || 'API Kural',
+        active: r.active !== false,
+        icon: r.icon || 'zap',
+        color: r.color || 'amber',
+        condition: r.condition || '',
+        action: r.action || '',
+        extra: r.extra || null,
+        triggerCount: r.triggerCount || 0,
+        zones: r.zones || [],
+        timeRange: r.timeRange || null,
+      }))
+    }
+  }
+})
+
+// ---- Conflict Detection ----
+
+const hasConflict = (rule, index) => {
+  if (!rule.active) return false
+  for (let i = 0; i < rules.value.length; i++) {
+    if (i === index) continue
+    const other = rules.value[i]
+    if (!other.active) continue
+    // Check zone overlap
+    if (rule.zones && rule.zones.length > 0 && other.zones && other.zones.length > 0) {
+      const overlap = rule.zones.some(z => other.zones.includes(z))
+      if (overlap) return true
+    }
+    // Check time overlap
+    if (rule.timeRange && other.timeRange) {
+      if (rule.timeRange.start < other.timeRange.end && rule.timeRange.end > other.timeRange.start) {
+        return true
+      }
+    }
+  }
+  return false
+}
+
+// ---- Test Rule ----
+
+const SAMPLE_ORDERS = [
+  { id: 'BRN-TEST-001', zone: 'Esenyurt', type: 'express', capacity: 15, eta: 50, pendingOrders: 120 },
+  { id: 'BRN-TEST-002', zone: 'Kadikoy', type: 'standard', capacity: 80, eta: 25, pendingOrders: 30 },
+  { id: 'BRN-TEST-003', zone: 'Sisli', type: 'express', capacity: 45, eta: 35, pendingOrders: 85 },
+]
+
+const handleTestRule = (rule) => {
+  testingRuleId.value = rule.id
+  setTimeout(() => {
+    const sample = SAMPLE_ORDERS[Math.floor(Math.random() * SAMPLE_ORDERS.length)]
+    let match = false
+    let reason = ''
+
+    if (rule.icon === 'zap') {
+      match = sample.capacity < 20
+      reason = match ? `Kapasite %${sample.capacity} (esik alti)` : `Kapasite %${sample.capacity} (yeterli)`
+    } else if (rule.icon === 'mappin') {
+      const zones = rule.zones || ['Esenyurt', 'Silivri', 'Catalca']
+      match = zones.includes(sample.zone)
+      reason = match ? `${sample.zone} uzak bolgede` : `${sample.zone} kapsam disinda`
+    } else if (rule.icon === 'clock') {
+      match = sample.pendingOrders > 100
+      reason = match ? `${sample.pendingOrders} bekleyen siparis (esik ustu)` : `${sample.pendingOrders} bekleyen siparis (normal)`
+    } else if (rule.icon === 'rocket') {
+      match = sample.type === 'express' && sample.eta > 45
+      reason = match ? `Express siparis, ETA ${sample.eta}dk (yuksek)` : `${sample.type} siparis, ETA ${sample.eta}dk`
+    } else {
+      match = Math.random() > 0.5
+      reason = match ? 'Kosul saglandi' : 'Kosul saglanmadi'
+    }
+
+    testResults.value = {
+      ...testResults.value,
+      [rule.id]: { match, sampleOrder: sample.id, reason }
+    }
+    testingRuleId.value = null
+  }, 800)
+}
 
 // ---- Methods ----
 
@@ -622,6 +780,10 @@ const handleSaveRule = () => {
         ? { label: 'Limit', value: `Max ${modalForm.limit} siparis/saat` }
         : null,
       triggerCount: 0,
+      zones: [...modalForm.zones],
+      timeRange: modalForm.timeStart && modalForm.timeEnd
+        ? { start: modalForm.timeStart, end: modalForm.timeEnd }
+        : null,
     }
     rules.value = [...rules.value, newRule]
   }
@@ -637,6 +799,10 @@ const toggleRule = (id) => {
 
 const deleteRule = (id) => {
   rules.value = rules.value.filter((r) => r.id !== id)
+  // Clean up test results
+  const newResults = { ...testResults.value }
+  delete newResults[id]
+  testResults.value = newResults
 }
 
 const addCondition = () => {

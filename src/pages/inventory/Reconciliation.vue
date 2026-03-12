@@ -13,31 +13,58 @@
 
     <!-- Summary Row 1 -->
     <div class="grid grid-cols-4 gap-4 mb-4">
-      <div v-for="(c, i) in summaryRow1" :key="i" class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
-        <div class="flex items-center justify-between mb-2">
-          <span class="text-xs font-medium text-slate-500 dark:text-slate-400">{{ c.label }}</span>
-          <div :class="['p-1.5 rounded-lg', c.bg]"><component :is="c.icon" :size="14" :class="c.color" /></div>
+      <template v-if="loading">
+        <div v-for="i in 4" :key="'sr1-sk-'+i" class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+          <div class="flex items-center justify-between mb-2">
+            <div class="h-3 w-20 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
+            <div class="h-7 w-7 bg-slate-200 dark:bg-slate-700 rounded-lg animate-pulse" />
+          </div>
+          <div class="h-6 w-24 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
         </div>
-        <p class="text-xl font-bold text-slate-800 dark:text-white">{{ c.value }}</p>
-      </div>
+      </template>
+      <template v-else>
+        <div v-for="(c, i) in summaryRow1" :key="i" class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-medium text-slate-500 dark:text-slate-400">{{ c.label }}</span>
+            <div :class="['p-1.5 rounded-lg', c.bg]"><component :is="c.icon" :size="14" :class="c.color" /></div>
+          </div>
+          <p class="text-xl font-bold text-slate-800 dark:text-white">{{ c.value }}</p>
+        </div>
+      </template>
     </div>
 
     <!-- Summary Row 2 -->
     <div class="grid grid-cols-4 gap-4 mb-6">
-      <div v-for="(c, i) in summaryRow2" :key="i" class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
-        <div class="flex items-center justify-between mb-2">
-          <span class="text-xs font-medium text-slate-500 dark:text-slate-400">{{ c.label }}</span>
-          <div :class="['p-1.5 rounded-lg', c.bg]"><component :is="c.icon" :size="14" :class="c.color" /></div>
+      <template v-if="loading">
+        <div v-for="i in 4" :key="'sr2-sk-'+i" class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+          <div class="flex items-center justify-between mb-2">
+            <div class="h-3 w-20 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
+            <div class="h-7 w-7 bg-slate-200 dark:bg-slate-700 rounded-lg animate-pulse" />
+          </div>
+          <div class="h-6 w-24 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
         </div>
-        <p class="text-xl font-bold text-slate-800 dark:text-white">{{ c.value }}</p>
-      </div>
+      </template>
+      <template v-else>
+        <div v-for="(c, i) in summaryRow2" :key="i" class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-medium text-slate-500 dark:text-slate-400">{{ c.label }}</span>
+            <div :class="['p-1.5 rounded-lg', c.bg]"><component :is="c.icon" :size="14" :class="c.color" /></div>
+          </div>
+          <p class="text-xl font-bold text-slate-800 dark:text-white">{{ c.value }}</p>
+        </div>
+      </template>
     </div>
 
     <!-- Tabs -->
     <div class="flex gap-2 mb-4">
-      <button v-for="t in tabItems" :key="t.key" @click="tab = t.key" :class="['px-4 py-2 rounded-lg text-sm font-medium cursor-pointer transition-colors', tab === t.key ? 'bg-primary text-white' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800']">
-        <span v-if="t.icon" class="mr-1">{{ t.icon }}</span>{{ t.label }}
-      </button>
+      <template v-if="loading">
+        <div v-for="i in 4" :key="'tab-sk-'+i" class="h-9 w-28 bg-slate-200 dark:bg-slate-700 rounded-lg animate-pulse" />
+      </template>
+      <template v-else>
+        <button v-for="t in tabItems" :key="t.key" @click="tab = t.key" :class="['px-4 py-2 rounded-lg text-sm font-medium cursor-pointer transition-colors', tab === t.key ? 'bg-primary text-white' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800']">
+          <span v-if="t.icon" class="mr-1">{{ t.icon }}</span>{{ t.label }}
+        </button>
+      </template>
     </div>
 
     <!-- Table -->
@@ -49,25 +76,42 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="c in shown.slice(0, 20)" :key="c.id" :class="['border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/50', c.status === 'issue' ? 'bg-red-50/30 dark:bg-red-900/5' : c.status === 'pending' ? 'bg-yellow-50/30 dark:bg-yellow-900/5' : '']">
-            <td class="px-4 py-3">
-              <div class="flex items-center gap-2">
-                <span class="text-xs">
-                  {{ c.status === 'completed' ? 'OK' : c.status === 'pending' ? '...' : '!!' }}
-                </span>
-                <span class="font-medium text-slate-800 dark:text-white">{{ c.name }}</span>
-              </div>
-            </td>
-            <td class="px-4 py-3 text-slate-700 dark:text-slate-300">{{ c.orders }}</td>
-            <td class="px-4 py-3 text-slate-700 dark:text-slate-300">{{ c.delivered }}</td>
-            <td class="px-4 py-3 font-semibold text-slate-800 dark:text-white">{{ fmt(c.cash) }}</td>
-            <td class="px-4 py-3 font-medium text-slate-700 dark:text-slate-300">{{ c.submitted > 0 ? fmt(c.submitted) : '-' }}</td>
-            <td class="px-4 py-3">
-              <span v-if="c.status === 'completed'" class="px-2 py-1 bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-400 rounded-full text-[11px] font-medium">Tamam</span>
-              <span v-if="c.status === 'pending'" class="px-2 py-1 bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 rounded-full text-[11px] font-medium">Bekliyor</span>
-              <span v-if="c.status === 'issue'" class="px-2 py-1 bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-full text-[11px] font-medium">{{ c.diffNote }}</span>
-            </td>
-          </tr>
+          <template v-if="loading">
+            <tr v-for="i in 8" :key="'tbl-sk-'+i" class="border-b border-slate-50 dark:border-slate-800/50">
+              <td class="px-4 py-3">
+                <div class="flex items-center gap-2">
+                  <div class="w-5 h-5 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
+                  <div class="h-4 w-24 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
+                </div>
+              </td>
+              <td class="px-4 py-3"><div class="h-4 w-8 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" /></td>
+              <td class="px-4 py-3"><div class="h-4 w-8 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" /></td>
+              <td class="px-4 py-3"><div class="h-4 w-16 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" /></td>
+              <td class="px-4 py-3"><div class="h-4 w-16 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" /></td>
+              <td class="px-4 py-3"><div class="h-5 w-16 bg-slate-200 dark:bg-slate-700 rounded-full animate-pulse" /></td>
+            </tr>
+          </template>
+          <template v-else>
+            <tr v-for="c in shown.slice(0, 20)" :key="c.id" :class="['border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/50', c.status === 'issue' ? 'bg-red-50/30 dark:bg-red-900/5' : c.status === 'pending' ? 'bg-yellow-50/30 dark:bg-yellow-900/5' : '']">
+              <td class="px-4 py-3">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs">
+                    {{ c.status === 'completed' ? 'OK' : c.status === 'pending' ? '...' : '!!' }}
+                  </span>
+                  <span class="font-medium text-slate-800 dark:text-white">{{ c.name }}</span>
+                </div>
+              </td>
+              <td class="px-4 py-3 text-slate-700 dark:text-slate-300">{{ c.orders }}</td>
+              <td class="px-4 py-3 text-slate-700 dark:text-slate-300">{{ c.delivered }}</td>
+              <td class="px-4 py-3 font-semibold text-slate-800 dark:text-white">{{ fmt(c.cash) }}</td>
+              <td class="px-4 py-3 font-medium text-slate-700 dark:text-slate-300">{{ c.submitted > 0 ? fmt(c.submitted) : '-' }}</td>
+              <td class="px-4 py-3">
+                <span v-if="c.status === 'completed'" class="px-2 py-1 bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-400 rounded-full text-[11px] font-medium">Tamam</span>
+                <span v-if="c.status === 'pending'" class="px-2 py-1 bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 rounded-full text-[11px] font-medium">Bekliyor</span>
+                <span v-if="c.status === 'issue'" class="px-2 py-1 bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-full text-[11px] font-medium">{{ c.diffNote }}</span>
+              </td>
+            </tr>
+          </template>
         </tbody>
       </table>
     </div>
@@ -75,16 +119,26 @@
     <!-- Summary footer -->
     <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-5 mb-6">
       <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Ozet</h3>
-      <div class="space-y-2">
-        <div class="flex justify-between text-sm"><span class="text-slate-500">Teslim edilmesi gereken nakit:</span><span class="font-semibold text-slate-800 dark:text-white">{{ fmt(nakitTahsilat) }}</span></div>
-        <div class="flex justify-between text-sm"><span class="text-slate-500">Teslim edilen nakit:</span><span class="font-semibold text-green-600">{{ fmt(totalSubmitted) }}</span></div>
-        <div class="flex justify-between text-sm"><span class="text-slate-500">Bekleyen nakit:</span><span class="font-semibold text-orange-600">{{ fmt(totalPending) }}</span></div>
-        <div class="flex justify-between text-sm border-t border-slate-100 dark:border-slate-800 pt-2"><span class="text-slate-500">Fark:</span><span :class="['font-bold', totalDiff === 0 ? 'text-green-600' : 'text-red-600']">{{ totalDiff === 0 ? '\u20BA0' : `-${fmt(totalDiff)}` }}</span></div>
-      </div>
+      <template v-if="loading">
+        <div class="space-y-3">
+          <div v-for="i in 4" :key="'sum-sk-'+i" class="flex justify-between">
+            <div class="h-4 w-40 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
+            <div class="h-4 w-20 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
+          </div>
+        </div>
+      </template>
+      <template v-else>
+        <div class="space-y-2">
+          <div class="flex justify-between text-sm"><span class="text-slate-500">Teslim edilmesi gereken nakit:</span><span class="font-semibold text-slate-800 dark:text-white">{{ fmt(nakitTahsilat) }}</span></div>
+          <div class="flex justify-between text-sm"><span class="text-slate-500">Teslim edilen nakit:</span><span class="font-semibold text-green-600">{{ fmt(totalSubmitted) }}</span></div>
+          <div class="flex justify-between text-sm"><span class="text-slate-500">Bekleyen nakit:</span><span class="font-semibold text-orange-600">{{ fmt(totalPending) }}</span></div>
+          <div class="flex justify-between text-sm border-t border-slate-100 dark:border-slate-800 pt-2"><span class="text-slate-500">Fark:</span><span :class="['font-bold', totalDiff === 0 ? 'text-green-600' : 'text-red-600']">{{ totalDiff === 0 ? '\u20BA0' : `-${fmt(totalDiff)}` }}</span></div>
+        </div>
+      </template>
     </div>
 
     <!-- Pending cash submissions -->
-    <div v-if="pending.length > 0" class="bg-white dark:bg-slate-900 rounded-xl border border-orange-200 dark:border-orange-800 p-5 mb-6">
+    <div v-if="!loading && pending.length > 0" class="bg-white dark:bg-slate-900 rounded-xl border border-orange-200 dark:border-orange-800 p-5 mb-6">
       <h3 class="text-sm font-semibold text-orange-700 dark:text-orange-400 mb-4 flex items-center gap-2"><Clock :size="16" /> Nakit Teslimi Bekleyenler</h3>
       <table class="w-full text-sm">
         <thead>
@@ -107,12 +161,20 @@
 
     <!-- Action bar -->
     <div class="flex items-center justify-between bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
-      <div class="flex gap-3">
-        <button class="flex items-center gap-1.5 px-4 py-2.5 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 rounded-lg text-sm cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800"><FileText :size="16" /> Detayli Rapor</button>
-        <button class="flex items-center gap-1.5 px-4 py-2.5 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 rounded-lg text-sm cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800"><Download :size="16" /> Excel Indir</button>
-        <button class="flex items-center gap-1.5 px-4 py-2.5 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 rounded-lg text-sm cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800"><Printer :size="16" /> Yazdir</button>
-      </div>
-      <button @click="closeModal = true" class="flex items-center gap-2 px-6 py-2.5 bg-primary hover:bg-primary/90 text-white rounded-lg text-sm font-medium cursor-pointer transition-colors"><Lock :size="16" /> Gunu Kapat</button>
+      <template v-if="loading">
+        <div class="flex gap-3">
+          <div v-for="i in 3" :key="'act-sk-'+i" class="h-10 w-32 bg-slate-200 dark:bg-slate-700 rounded-lg animate-pulse" />
+        </div>
+        <div class="h-10 w-32 bg-slate-200 dark:bg-slate-700 rounded-lg animate-pulse" />
+      </template>
+      <template v-else>
+        <div class="flex gap-3">
+          <button class="flex items-center gap-1.5 px-4 py-2.5 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 rounded-lg text-sm cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800"><FileText :size="16" /> Detayli Rapor</button>
+          <button class="flex items-center gap-1.5 px-4 py-2.5 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 rounded-lg text-sm cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800"><Download :size="16" /> Excel Indir</button>
+          <button class="flex items-center gap-1.5 px-4 py-2.5 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 rounded-lg text-sm cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800"><Printer :size="16" /> Yazdir</button>
+        </div>
+        <button @click="closeModal = true" class="flex items-center gap-2 px-6 py-2.5 bg-primary hover:bg-primary/90 text-white rounded-lg text-sm font-medium cursor-pointer transition-colors"><Lock :size="16" /> Gunu Kapat</button>
+      </template>
     </div>
 
     <!-- Teslim Al Modal -->
@@ -183,12 +245,21 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import {
   CheckCircle, Clock, AlertTriangle, Download, Printer, FileText,
   X, Banknote, CreditCard, Building2, Users, Package, TrendingUp,
   Lock
 } from 'lucide-vue-next'
+
+// ========== LOADING STATE ==========
+const loading = ref(true)
+
+onMounted(() => {
+  setTimeout(() => {
+    loading.value = false
+  }, 1200)
+})
 
 const fmt = (n) => '\u20BA' + Math.abs(n).toLocaleString('tr-TR')
 

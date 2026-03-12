@@ -1,0 +1,13 @@
+interface CardProps {
+  children: React.ReactNode
+  className?: string
+  padding?: boolean
+}
+
+export function Card({ children, className = '', padding = true }: CardProps) {
+  return (
+    <div className={`bg-bg-secondary border border-border-subtle rounded-xl ${padding ? 'p-5' : ''} ${className}`}>
+      {children}
+    </div>
+  )
+}

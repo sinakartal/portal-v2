@@ -12,11 +12,18 @@ export default defineConfig({
   },
   server: {
     host: true,
-    allowedHosts: [
-      'localhost',
-      'corporate.localhost',
-      'restaurant.localhost',
-      'ship.localhost',
-    ],
+    port: 5173,
+    proxy: {
+      '/algoritma': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/algoritma/, ''),
+      },
+      '/portal-api': {
+        target: 'http://localhost:3002',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/portal-api/, ''),
+      },
+    },
   },
 })

@@ -1,89 +1,59 @@
 import {
   LayoutDashboard, Package, Truck, MapPin, BarChart3,
-  Wallet, Settings, Users, Building2, Navigation,
-  ClipboardList, Handshake, FileBarChart
+  Wallet, Settings, Users, Building2,
+  ClipboardList, Handshake, FileBarChart, Gift, Award, ShoppingCart, FolderOpen,
+  Map, DollarSign, Cpu
 } from 'lucide-vue-next'
 
-export const MENU_ITEMS = [
+export const MENU_SECTIONS = [
   {
-    title: 'Dashboard',
-    path: '/dashboard',
-    icon: LayoutDashboard,
-    permission: null,
+    label: 'Operasyon',
+    items: [
+      { title: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, permission: null },
+      { title: 'Canli Harita', path: '/live-map', icon: Map, permission: null },
+      { title: 'Fiyatlama', path: '/pricing', icon: DollarSign, permission: null },
+      { title: 'Algoritma', path: '/algorithm', icon: Cpu, permission: null },
+      { title: 'Siparisler', path: '/orders', icon: Package, permission: 'orders:read', badgeKey: 'activeOrders' },
+      { title: 'Zimmet & Nakit', path: '/inventory', icon: ClipboardList, permission: 'couriers:read' },
+      { title: 'Kuryeler', path: '/couriers', icon: Truck, permission: 'couriers:read', badgeKey: 'onlineCouriers' },
+      { title: 'Rotalar', path: '/routes', icon: MapPin, permission: 'routes:read' },
+    ],
   },
   {
-    title: 'Canli Takip',
-    path: '/tracking',
-    icon: Navigation,
-    permission: 'couriers:track',
+    label: 'Analiz',
+    items: [
+      { title: 'Analitik', path: '/analytics', icon: BarChart3, permission: 'analytics:read' },
+      { title: 'Raporlar', path: '/reports', icon: FileBarChart, permission: 'analytics:read' },
+      { title: 'Finans', path: '/finance', icon: Wallet, permission: 'finance:read' },
+    ],
   },
   {
-    title: 'Siparisler',
-    path: '/orders',
-    icon: Package,
-    permission: 'orders:read',
+    label: 'Ozellikler',
+    items: [
+      { title: 'Teklifler', path: '/offers', icon: Gift, permission: 'orders:read' },
+      { title: 'Tesvikler', path: '/incentives', icon: Award, permission: 'analytics:read' },
+      { title: 'Checkout Widget', path: '/checkout-preview', icon: ShoppingCart, permission: 'settings:read' },
+    ],
   },
   {
-    title: 'Zimmet & Nakit',
-    path: '/inventory',
-    icon: ClipboardList,
-    permission: 'couriers:read',
+    label: 'Yonetim',
+    items: [
+      { title: '3PL Partnerler', path: '/partners', icon: Handshake, permission: 'settings:read' },
+      { title: 'Projeler', path: '/projects', icon: FolderOpen, permission: 'settings:read' },
+      { title: 'Tenant Yonetimi', path: '/tenants', icon: Building2, permission: null },
+      { title: 'Kullanicilar', path: '/users', icon: Users, permission: 'users:read' },
+    ],
   },
   {
-    title: 'Kuryeler',
-    path: '/couriers',
-    icon: Truck,
-    permission: 'couriers:read',
-  },
-  {
-    title: 'Rotalar',
-    path: '/routes',
-    icon: MapPin,
-    permission: 'routes:read',
-  },
-  {
-    title: 'Analitik',
-    path: '/analytics',
-    icon: BarChart3,
-    permission: 'analytics:read',
-  },
-  {
-    title: 'Raporlar',
-    path: '/reports',
-    icon: FileBarChart,
-    permission: 'analytics:read',
-  },
-  {
-    title: 'Finans',
-    path: '/finance',
-    icon: Wallet,
-    permission: 'finance:read',
-  },
-  {
-    title: 'Projeler',
-    path: '/projects',
-    icon: Building2,
-    permission: 'settings:read',
-  },
-  {
-    title: '3PL Partnerler',
-    path: '/partners',
-    icon: Handshake,
-    permission: 'settings:read',
-  },
-  {
-    title: 'Kullanicilar',
-    path: '/users',
-    icon: Users,
-    permission: 'users:read',
-  },
-  {
-    title: 'Ayarlar',
-    path: '/settings',
-    icon: Settings,
-    permission: 'settings:read',
+    label: 'Sistem',
+    items: [
+      { title: 'Ayarlar', path: '/settings', icon: Settings, permission: 'settings:read' },
+    ],
   },
 ]
+
+// Flat MENU_ITEMS for backward compatibility
+export const MENU_ITEMS = MENU_SECTIONS.flatMap(s => s.items)
 
 export const ORDER_STATUSES = {
   pending: { label: 'Beklemede', color: '#f59e0b', bg: '#fef3c7' },
