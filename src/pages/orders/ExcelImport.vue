@@ -1100,7 +1100,7 @@ const startImport = async () => {
       const res = await createOrder({
         orderId: row.id,
         externalOrderId: row.id,
-        projectId: project.value || authStore.activeProjectId || 'default',
+        projectId: project.value || authStore.activeProjectId || authStore.user?.defaultProject || 'default',
         originId: 'origin-1',
         deliveryLocation: { lat: row.lat || 41.0, lng: row.lng || 29.0 },
         customerName: row.customer || '',

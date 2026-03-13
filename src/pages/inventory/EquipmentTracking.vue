@@ -1,5 +1,10 @@
 <template>
   <div>
+    <!-- Beta Banner -->
+    <div class="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg flex items-center gap-2 text-blue-700 dark:text-blue-400 text-sm">
+      <span class="px-1.5 py-0.5 bg-blue-500 text-white text-[10px] font-bold rounded uppercase">Beta</span>
+      <span>Bu modul yakinda gercek verilerle guncellenecek.</span>
+    </div>
     <!-- Header -->
     <div class="flex items-center justify-between mb-6">
       <h1 class="text-xl font-bold text-slate-800 dark:text-white">Ekipman Zimmet Takip</h1>

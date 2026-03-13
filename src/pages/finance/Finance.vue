@@ -280,6 +280,13 @@
                 </tr>
               </thead>
               <tbody>
+                <tr v-if="filteredPayroll.length === 0">
+                  <td colspan="12" class="px-4 py-12 text-center text-slate-400 dark:text-slate-500">
+                    <Wallet :size="40" class="mx-auto mb-2 opacity-40" />
+                    <p class="font-medium">Hakedis verisi bulunamadi</p>
+                    <p class="text-xs mt-1">Kurye verileri API'den yuklendiginde burada gorunecek.</p>
+                  </td>
+                </tr>
                 <tr v-for="p in filteredPayroll" :key="p._id" class="border-b border-slate-50 dark:border-slate-700/50 hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
                   <td class="px-4 py-3">
                     <input
@@ -410,6 +417,13 @@
                 </tr>
               </thead>
               <tbody>
+                <tr v-if="filteredInvoices.length === 0">
+                  <td colspan="11" class="px-4 py-12 text-center text-slate-400 dark:text-slate-500">
+                    <FileText :size="40" class="mx-auto mb-2 opacity-40" />
+                    <p class="font-medium">Fatura verisi bulunamadi</p>
+                    <p class="text-xs mt-1">Fatura entegrasyonu tamamlandiginda burada gorunecek.</p>
+                  </td>
+                </tr>
                 <tr
                   v-for="inv in filteredInvoices"
                   :key="inv._id"
@@ -549,71 +563,6 @@ const perPage = 15
 const selectedPayrolls = ref([])
 const confirmPayroll = ref(null)
 
-const generateMockData = () => {
-  const courierNames = [
-    'Serkan Acar', 'Murat Yildirim', 'Hakan Tekin', 'Kemal Bas',
-    'Selim Dursun', 'Taner Gul', 'Volkan Aslan', 'Cem Ozkan',
-    'Baris Ay', 'Erkan Sahin', 'Firat Kocer', 'Deniz Uysal',
-    'Caner Aktas', 'Onur Cevik', 'Tolga Eren'
-  ]
-
-  const payrollStatuses = ['pending', 'approved', 'paid', 'paid', 'paid']
-
-  payrollData.value = courierNames.map((name, i) => {
-    const deliveries = Math.floor(Math.random() * 250) + 80
-    const perDelivery = Math.random() * 10 + 25
-    const gross = Math.round(deliveries * perDelivery)
-    const sgk = Math.round(gross * 0.14)
-    const tax = Math.round(gross * 0.15)
-    const penalty = Math.random() > 0.7 ? Math.floor(Math.random() * 200) + 50 : 0
-    const bonus = Math.random() > 0.5 ? Math.floor(Math.random() * 300) + 100 : 0
-    const deductions = sgk + tax + penalty
-    const net = gross - deductions + bonus
-    const status = payrollStatuses[i % payrollStatuses.length]
-    return {
-      _id: `pay-${i}`,
-      courier: name,
-      period: 'Ocak 2026',
-      deliveries,
-      gross,
-      sgk,
-      tax,
-      penalty,
-      bonus,
-      deductions,
-      net,
-      status,
-      approvedBy: status !== 'pending' ? 'Admin' : null,
-      paidAt: status === 'paid' ? new Date(Date.now() - Math.random() * 604800000).toISOString() : null,
-    }
-  })
-
-  const invoiceStatuses = ['draft', 'sent', 'paid', 'paid', 'overdue', 'cancelled']
-  const clients = [
-    'E-Ticaret Lojistik A.S.', 'Istanbul Ana Dagitim Ltd.', 'Express Kargo A.S.',
-    'Gida Dagitim Ltd.', 'Ankara Bolge Ltd.', 'Izmir Sahil A.S.',
-    'Bursa Sanayi Ltd.', 'Antalya Turizm A.S.'
-  ]
-
-  invoices.value = Array.from({ length: 25 }, (_, i) => {
-    const amount = Math.floor(Math.random() * 50000) + 5000
-    const status = invoiceStatuses[i % invoiceStatuses.length]
-    return {
-      _id: `inv-${i}`,
-      invoiceNumber: `FTR-${String(2026001 + i)}`,
-      client: clients[i % clients.length],
-      project: ['Istanbul Ana Dagitim', 'Express Teslimat', 'Gida Dagitim', 'E-Ticaret Lojistik'][i % 4],
-      amount,
-      tax: Math.round(amount * 0.20),
-      total: Math.round(amount * 1.20),
-      status,
-      issueDate: new Date(2026, 0, Math.floor(Math.random() * 28) + 1).toISOString(),
-      dueDate: new Date(2026, 1, Math.floor(Math.random() * 28) + 1).toISOString(),
-      paidAt: status === 'paid' ? new Date(Date.now() - Math.random() * 1296000000).toISOString() : null,
-    }
-  })
-}
-
 onMounted(async () => {
   loading.value = true
   error.value = null
@@ -627,10 +576,9 @@ onMounted(async () => {
     if (couriersRes.ok && couriersRes.data) {
       const couriers = Array.isArray(couriersRes.data) ? couriersRes.data : couriersRes.data?.couriers || []
       if (couriers.length > 0) {
-        const payrollStatuses = ['pending', 'approved', 'paid', 'paid', 'paid']
         payrollData.value = couriers.map((c, i) => {
-          const deliveries = c.deliveryCount || c.totalDeliveries || Math.floor(Math.random() * 250) + 80
-          const perDelivery = c.perDeliveryRate || (Math.random() * 10 + 25)
+          const deliveries = c.deliveryCount || c.totalDeliveries || 0
+          const perDelivery = c.perDeliveryRate || 0
           const gross = Math.round(deliveries * perDelivery)
           const sgk = Math.round(gross * 0.14)
           const tax = Math.round(gross * 0.15)
@@ -638,11 +586,11 @@ onMounted(async () => {
           const bonus = c.bonus || 0
           const deductions = sgk + tax + penalty
           const net = gross - deductions + bonus
-          const status = c.payrollStatus || payrollStatuses[i % payrollStatuses.length]
+          const status = c.payrollStatus || 'pending'
           return {
             _id: c.id || c._id || `pay-${i}`,
             courier: c.name || `Kurye ${i + 1}`,
-            period: 'Ocak 2026',
+            period: new Date().toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' }),
             deliveries,
             gross,
             sgk,
@@ -653,49 +601,22 @@ onMounted(async () => {
             net,
             status,
             approvedBy: status !== 'pending' ? 'Admin' : null,
-            paidAt: status === 'paid' ? new Date(Date.now() - Math.random() * 604800000).toISOString() : null,
+            paidAt: c.paidAt || null,
           }
         })
       }
     }
 
-    // If payroll not populated from API, use mock
-    if (payrollData.value.length === 0) {
-      generateMockData()
-    } else {
-      // Still generate mock invoices (no invoice API available)
-      const invoiceStatuses = ['draft', 'sent', 'paid', 'paid', 'overdue', 'cancelled']
-      const clients = [
-        'E-Ticaret Lojistik A.S.', 'Istanbul Ana Dagitim Ltd.', 'Express Kargo A.S.',
-        'Gida Dagitim Ltd.', 'Ankara Bolge Ltd.', 'Izmir Sahil A.S.',
-        'Bursa Sanayi Ltd.', 'Antalya Turizm A.S.'
-      ]
-      invoices.value = Array.from({ length: 25 }, (_, i) => {
-        const amount = Math.floor(Math.random() * 50000) + 5000
-        const status = invoiceStatuses[i % invoiceStatuses.length]
-        return {
-          _id: `inv-${i}`,
-          invoiceNumber: `FTR-${String(2026001 + i)}`,
-          client: clients[i % clients.length],
-          project: ['Istanbul Ana Dagitim', 'Express Teslimat', 'Gida Dagitim', 'E-Ticaret Lojistik'][i % 4],
-          amount,
-          tax: Math.round(amount * 0.20),
-          total: Math.round(amount * 1.20),
-          status,
-          issueDate: new Date(2026, 0, Math.floor(Math.random() * 28) + 1).toISOString(),
-          dueDate: new Date(2026, 1, Math.floor(Math.random() * 28) + 1).toISOString(),
-          paidAt: status === 'paid' ? new Date(Date.now() - Math.random() * 1296000000).toISOString() : null,
-        }
-      })
-    }
+    // Invoices — empty until Hub finance API is ready
+    invoices.value = []
   } catch (e) {
     console.error('[Finance] API error:', e)
     error.value = 'Veriler yuklenirken hata olustu'
-    generateMockData()
+    payrollData.value = []
+    invoices.value = []
   } finally {
     loading.value = false
   }
-
 })
 
 const payrollStatusConfig = {

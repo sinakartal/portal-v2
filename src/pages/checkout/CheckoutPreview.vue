@@ -5,7 +5,8 @@ import { getCheckoutOptions } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 
 const authStore = useAuthStore()
-const currentProjectId = computed(() => authStore.activeProjectId || 'YOUR_PROJECT_ID')
+const currentProjectId = computed(() => authStore.activeProjectId || null)
+const hasProject = computed(() => !!currentProjectId.value)
 
 const form = ref({
   originLat: 40.99,
@@ -139,6 +140,12 @@ const currentTime = computed(() => {
   <div>
     <h1 class="text-2xl font-bold text-slate-800 dark:text-white mb-1">Checkout Widget Onizleme</h1>
     <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">E-ticaret sitelerinde gorunecek teslimat widget'ini test edin</p>
+
+    <!-- Proje secili degil uyarisi -->
+    <div v-if="!hasProject" class="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg flex items-center gap-2 text-amber-700 dark:text-amber-400 text-sm">
+      <span class="font-medium">⚠ Proje seciniz.</span>
+      <span>Checkout widget'i kullanmak icin sol menuden bir proje secin veya Proje Yonetimi sayfasindan yeni proje olusturun.</span>
+    </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
       <!-- Sol Panel: Test + Theme + Embed -->

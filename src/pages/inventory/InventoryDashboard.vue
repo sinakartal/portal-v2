@@ -1,5 +1,10 @@
 <template>
   <div class="relative">
+    <!-- Beta Banner -->
+    <div class="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg flex items-center gap-2 text-blue-700 dark:text-blue-400 text-sm">
+      <span class="px-1.5 py-0.5 bg-blue-500 text-white text-[10px] font-bold rounded uppercase">Beta</span>
+      <span>Bu modul yakinda gercek verilerle guncellenecek.</span>
+    </div>
     <!-- Header -->
     <div class="flex items-center justify-between mb-6">
       <h1 class="text-xl font-bold text-slate-800 dark:text-white">Zimmet & Nakit Takip</h1>
@@ -13,10 +18,10 @@
       </div>
     </div>
 
-    <!-- KPI Cards: Toplam Ekipman | Aktif | Bakimda | Kayip -->
-    <div class="grid grid-cols-4 gap-4 mb-4">
+    <!-- KPI Cards: Toplam Ekipman | Aktif | Bakimda | Kayip | Bloklu -->
+    <div class="grid grid-cols-5 gap-4 mb-4">
       <template v-if="loading">
-        <div v-for="i in 4" :key="'kpi-sk-'+i" class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
+        <div v-for="i in 5" :key="'kpi-sk-'+i" class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
           <div class="flex items-center justify-between mb-3">
             <div class="h-3 w-20 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
             <div class="h-8 w-8 bg-slate-200 dark:bg-slate-700 rounded-lg animate-pulse" />
@@ -98,7 +103,7 @@
         <table class="w-full text-sm">
           <thead>
             <tr class="border-b border-slate-100 dark:border-slate-800">
-              <th v-for="h in ['Kurye', 'Durum', 'Atanan Kurye', 'Zimmet', 'Teslim', 'Bekleyen', 'Basarisiz', 'Nakit Uzerinde', 'Risk', 'Son Aktivite', 'Islemler']" :key="h" class="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{{ h }}</th>
+              <th v-for="h in ['Kurye', 'Durum', 'Finansal Durum', 'Atanan Kurye', 'Zimmet', 'Teslim', 'Bekleyen', 'Basarisiz', 'Nakit Uzerinde', 'Risk', 'Son Aktivite', 'Islemler']" :key="h" class="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{{ h }}</th>
             </tr>
           </thead>
           <tbody>
@@ -138,7 +143,22 @@
                     </div>
                   </div>
                 </td>
-                <td class="px-4 py-3"><span :class="['px-2 py-1 rounded-full text-[11px] font-medium', statusColor(c.status)]">{{ statusLabel(c.status) }}</span></td>
+                <td class="px-4 py-3">
+                  <div class="flex items-center gap-1.5">
+                    <span :class="['px-2 py-1 rounded-full text-[11px] font-medium', statusColor(c.status)]">{{ statusLabel(c.status) }}</span>
+                    <span v-if="c.isBlocked" class="px-2 py-1 rounded-full text-[11px] font-bold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300">BLOKLU</span>
+                  </div>
+                </td>
+
+                <!-- Finansal Durum column -->
+                <td class="px-4 py-3">
+                  <div class="flex flex-col gap-0.5">
+                    <span :class="['text-xs font-medium', c.openZimmet > 15 ? 'text-red-600' : c.openZimmet > 10 ? 'text-yellow-600' : 'text-green-600']">
+                      {{ c.openZimmet }} acik zimmet
+                    </span>
+                    <span class="text-[10px] text-slate-400">{{ c.lastClearance || 'Temizlenmedi' }}</span>
+                  </div>
+                </td>
 
                 <!-- Atanan Kurye column -->
                 <td class="px-4 py-3">
@@ -162,9 +182,28 @@
                 <td class="px-4 py-3"><span :class="['px-2 py-1 rounded-full text-[11px] font-medium', riskOf(c.cash).cls]">{{ riskOf(c.cash).dot }} {{ riskOf(c.cash).label }}</span></td>
                 <td class="px-4 py-3 text-slate-500 dark:text-slate-400 text-xs">{{ c.lastActivity }}</td>
                 <td class="px-4 py-3">
-                  <div class="flex items-center gap-1">
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <!-- Blok badge -->
+                    <span v-if="c.isBlocked"
+                      class="flex items-center gap-1 px-2 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-full text-[10px] font-bold">
+                      <Lock :size="10" /> Bloklu
+                    </span>
+                    <!-- Detay -->
                     <button @click.stop="detail = c" class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg cursor-pointer" title="Detay"><Eye :size="14" class="text-slate-500" /></button>
-                    <button @click.stop="cashModal = c; cashAmount = c.cash.toString(); cashType = 'full'" class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg cursor-pointer" title="Mutabakat"><ArrowRightLeft :size="14" class="text-slate-500" /></button>
+                    <!-- Zimmeti Kapat / Mutabakat -->
+                    <button
+                      @click.stop="openZimmetModal(c)"
+                      :class="[
+                        'p-1.5 rounded-lg cursor-pointer transition-colors',
+                        (c.isBlocked || c.cash > 0 || c.unclearedCard > 0)
+                          ? 'hover:bg-red-50 dark:hover:bg-red-950/30'
+                          : 'hover:bg-slate-100 dark:hover:bg-slate-700'
+                      ]"
+                      :title="c.isBlocked ? 'Bloklu — Zimmeti Kapat' : 'Mutabakat'"
+                    >
+                      <ArrowRightLeft :size="14"
+                        :class="(c.isBlocked || c.cash > 0) ? 'text-red-500' : 'text-slate-500'" />
+                    </button>
                     <button @click.stop class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg cursor-pointer" title="Mesaj"><MessageSquare :size="14" class="text-slate-500" /></button>
                   </div>
                 </td>
@@ -444,6 +483,182 @@
         </div>
       </div>
     </div>
+    <!-- Zimmet Kapatma Modal -->
+    <Teleport to="body">
+      <div v-if="zimmetModal" class="fixed inset-0 z-50 flex items-center justify-center">
+        <div class="absolute inset-0 bg-black/50" @click="zimmetModal = null" />
+        <div class="relative bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+
+          <!-- Header -->
+          <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-700">
+            <div>
+              <h3 class="font-bold text-slate-800 dark:text-white text-lg">Zimmeti Kapat</h3>
+              <p class="text-xs text-slate-500 mt-0.5">{{ zimmetModal.name }}</p>
+            </div>
+            <button @click="zimmetModal = null" class="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg cursor-pointer">
+              <X :size="18" class="text-slate-500" />
+            </button>
+          </div>
+
+          <!-- Step Indicator -->
+          <div class="flex items-center gap-0 px-6 py-3 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+            <template v-for="(step, i) in ['Acik Siparisler', 'Finansal', 'Onayla']" :key="i">
+              <div class="flex items-center gap-1.5">
+                <div :class="[
+                  'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-colors',
+                  zimmetStep > i + 1 ? 'bg-green-500 text-white'
+                  : zimmetStep === i + 1 ? 'bg-indigo-600 text-white'
+                  : 'bg-slate-200 dark:bg-slate-700 text-slate-400'
+                ]">
+                  <CheckCircle v-if="zimmetStep > i + 1" :size="14" />
+                  <span v-else>{{ i + 1 }}</span>
+                </div>
+                <span :class="['text-xs font-medium', zimmetStep === i + 1 ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400']">
+                  {{ step }}
+                </span>
+              </div>
+              <div v-if="i < 2" class="flex-1 h-px bg-slate-200 dark:bg-slate-700 mx-2" />
+            </template>
+          </div>
+
+          <!-- Step 1: Acik Siparisler -->
+          <div v-if="zimmetStep === 1" class="p-6 space-y-3 max-h-80 overflow-y-auto">
+            <div v-if="!(zimmetModal.orderDetails?.filter(o => ['pending','in_transit','assigned','failed'].includes(o.status))?.length)"
+              class="text-center py-6 text-sm text-slate-400">
+              <CheckCircle :size="24" class="mx-auto mb-2 text-green-500" />
+              Acik siparis yok
+            </div>
+            <div v-for="order in zimmetModal.orderDetails?.filter(o => ['pending','in_transit','assigned','failed'].includes(o.status))"
+              :key="order.id"
+              class="p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-semibold text-slate-700 dark:text-slate-300 font-mono">
+                  {{ order.orderNumber || order.id }}
+                </span>
+                <span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 font-medium">
+                  {{ order.status }}
+                </span>
+              </div>
+              <div class="grid grid-cols-3 gap-1.5">
+                <button
+                  v-for="opt in [
+                    { action: 'failed', label: 'Teslim Edilemedi', cls: 'border-red-200 text-red-600 hover:bg-red-50' },
+                    { action: 'transfer', label: 'Devret', cls: 'border-blue-200 text-blue-600 hover:bg-blue-50' },
+                    { action: 'cancel', label: 'Iptal Et', cls: 'border-slate-200 text-slate-600 hover:bg-slate-50' },
+                  ]" :key="opt.action"
+                  @click="zimmetOrderActions[order.id] = { action: opt.action }"
+                  :class="[
+                    'py-1.5 text-[11px] font-medium border rounded-lg cursor-pointer transition-colors',
+                    opt.cls,
+                    zimmetOrderActions[order.id]?.action === opt.action
+                      ? 'ring-2 ring-offset-1 ring-indigo-500 font-bold'
+                      : ''
+                  ]">
+                  {{ opt.label }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 2: Finansal -->
+          <div v-else-if="zimmetStep === 2" class="p-6 space-y-4">
+            <!-- Nakit -->
+            <div v-if="zimmetModal.cash > 0" class="p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+              <p class="text-xs font-bold text-amber-700 dark:text-amber-400 mb-2">Nakit Teslim</p>
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs text-amber-600">Sistemde kayitli:</span>
+                <span class="font-bold text-amber-800 dark:text-amber-300">{{ fmt(zimmetModal.cash) }}</span>
+              </div>
+              <input type="number" v-model="zimmetCashEntered"
+                class="w-full px-3 py-2 border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-800 rounded-lg text-sm font-semibold text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400/30"
+                placeholder="Teslim alinan tutar" />
+              <div v-if="parseFloat(zimmetCashEntered) !== zimmetModal.cash" class="mt-2">
+                <p class="text-xs text-red-600 dark:text-red-400 mb-1">
+                  Fark: {{ fmt(Math.abs(parseFloat(zimmetCashEntered) - zimmetModal.cash)) }} — neden?
+                </p>
+                <textarea v-model="zimmetCashNote" rows="2"
+                  class="w-full px-3 py-2 border border-red-200 dark:border-red-700 bg-white dark:bg-slate-800 rounded-lg text-xs text-slate-700 dark:text-slate-300 focus:outline-none"
+                  placeholder="Fark aciklamasi..." />
+              </div>
+            </div>
+
+            <!-- Kart / POS -->
+            <div v-if="zimmetModal.orderDetails?.some(o => o.payment === 'card' && !o.paymentCleared)"
+              class="space-y-2">
+              <p class="text-xs font-bold text-slate-600 dark:text-slate-400">POS Fis Numaralari</p>
+              <div v-for="order in zimmetModal.orderDetails?.filter(o => o.payment === 'card' && !o.paymentCleared)"
+                :key="order.id"
+                class="flex items-center gap-2">
+                <span class="text-xs text-slate-500 flex-1 truncate font-mono">{{ order.orderNumber || order.id }}</span>
+                <input type="text" v-model="zimmetPosReceipts[order.id]"
+                  :disabled="zimmetPosNoReceipt[order.id]"
+                  class="w-28 px-2 py-1 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 rounded text-xs text-center font-mono disabled:opacity-40"
+                  placeholder="Fis no" />
+                <label class="flex items-center gap-1 text-[10px] text-slate-400 cursor-pointer">
+                  <input type="checkbox" v-model="zimmetPosNoReceipt[order.id]" class="accent-slate-400" />
+                  Fis yok
+                </label>
+              </div>
+            </div>
+
+            <div v-if="!zimmetModal.cash && !zimmetModal.orderDetails?.some(o => o.payment === 'card' && !o.paymentCleared)"
+              class="text-center py-4 text-sm text-slate-400">
+              <CheckCircle :size="20" class="mx-auto mb-1 text-green-500" />
+              Finansal temiz
+            </div>
+          </div>
+
+          <!-- Step 3: Ozet & Onayla -->
+          <div v-else-if="zimmetStep === 3" class="p-6 space-y-3">
+            <div class="p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 space-y-2">
+              <p class="text-sm font-semibold text-green-800 dark:text-green-300">Zimmeti kapat — ozet</p>
+              <div class="flex justify-between text-xs">
+                <span class="text-slate-500">Kurye:</span>
+                <span class="font-medium text-slate-700 dark:text-slate-300">{{ zimmetModal.name }}</span>
+              </div>
+              <div class="flex justify-between text-xs">
+                <span class="text-slate-500">Islenen siparis:</span>
+                <span class="font-medium text-slate-700 dark:text-slate-300">{{ Object.keys(zimmetOrderActions).length }}</span>
+              </div>
+              <div class="flex justify-between text-xs">
+                <span class="text-slate-500">Nakit teslim:</span>
+                <span class="font-medium text-emerald-700 dark:text-emerald-400">{{ fmt(parseFloat(zimmetCashEntered) || 0) }}</span>
+              </div>
+            </div>
+            <p class="text-xs text-slate-400 text-center">Onayladiktan sonra kurye bloku kaldirilir ve yeni siparis alabilir.</p>
+          </div>
+
+          <!-- Footer -->
+          <div class="flex items-center justify-between px-6 py-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+            <button
+              v-if="zimmetStep > 1"
+              @click="zimmetStep--"
+              class="px-4 py-2 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-400 rounded-lg text-sm cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700">
+              Geri
+            </button>
+            <div v-else />
+
+            <button
+              v-if="zimmetStep < 3"
+              @click="zimmetStep++"
+              :disabled="(zimmetStep === 1 && !step1Complete) || (zimmetStep === 2 && !step2Complete)"
+              class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+              Devam
+            </button>
+
+            <button
+              v-else
+              @click="submitZimmetClear"
+              :disabled="zimmetSaving"
+              class="px-5 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium cursor-pointer disabled:opacity-50 transition-colors flex items-center gap-2">
+              <RefreshCw v-if="zimmetSaving" :size="14" class="animate-spin" />
+              <CheckCircle v-else :size="14" />
+              Zimmeti Kapat
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -464,7 +679,7 @@
   - Nakit teslim alma modali ile mutabakat yapilabilir
   - Hover ile hizli ozet popup goruntulenir
 
-  Not: Tum veriler mock (sahte) veridir, API entegrasyonunda degistirilecek.
+  Bu modul beta asamasindadir. Gercek verilerle yakinlarda guncellenecektir.
 -->
 <script setup>
 import { ref, computed, reactive, onMounted } from 'vue'
@@ -474,8 +689,9 @@ import {
   ChevronLeft, ChevronRight, X, Phone, MessageSquare, Eye, CheckCircle,
   Clock, Coffee, WifiOff, Truck, MapPin, ArrowRightLeft, Receipt,
   Smartphone, ShoppingBag, CreditCard, Bike, Wrench, UserPlus, Check,
-  Box, Activity, ShieldAlert, HelpCircle
+  Box, Activity, ShieldAlert, HelpCircle, ShieldCheck, Ban, Lock
 } from 'lucide-vue-next'
+import { getCourierZimmetStatus, clearCourierZimmet, updateCourierBlock } from '@/services/api'
 
 const router = useRouter()
 
@@ -580,8 +796,19 @@ const COURIERS = NAMES.map((name, i) => {
   // Bakim tarihi mock: bazilarina yakin bakim tarihi ata
   const maintenanceDaysLeft = seed(i + 25) < 0.15 ? Math.floor(seed(i + 26) * 5) + 2 : seed(i + 25) < 0.3 ? Math.floor(seed(i + 27) * 20) + 10 : null
 
+  // Zimmet clearance fields
+  const openZimmet = status === 'offline' ? 0 : Math.floor(seed(i + 30) * 20)
+  const isBlocked = seed(i + 31) < 0.12 && status !== 'offline' // ~12% bloklu
+  const lastClearanceHours = Math.floor(seed(i + 32) * 72)
+  const lastClearance = lastClearanceHours < 24
+    ? `${lastClearanceHours} saat once`
+    : lastClearanceHours < 48 ? 'Dun' : `${Math.floor(lastClearanceHours / 24)} gun once`
+
   return {
     id: i + 1, name, status, assigned, delivered, pending, failed, cash,
+    openZimmet,
+    isBlocked,
+    lastClearance: status === 'offline' ? null : lastClearance,
     lastActivity: mins < 5 ? 'Az once' : mins < 60 ? `${mins} dk once` : `${Math.floor(mins / 60)} saat once`,
     phone: `053${Math.floor(seed(i + 6) * 9)}${Math.floor(seed(i + 7) * 10000000).toString().padStart(7, '0')}`,
     location: ['Kadikoy', 'Besiktas', 'Uskudar', 'Sisli', 'Bakirkoy', 'Atasehir', 'Maltepe', 'Pendik'][Math.floor(seed(i + 8) * 8)],
@@ -602,7 +829,7 @@ const COURIERS = NAMES.map((name, i) => {
 // ========== EKIPMAN KPI HESAPLAMALARI ==========
 
 const equipmentTotals = computed(() => {
-  let total = 0, active = 0, maintenance = 0, lost = 0
+  let total = 0, active = 0, maintenance = 0, lost = 0, blocked = 0
   COURIERS.forEach(c => {
     const eqCount = [c.equipment.pos, c.equipment.bag, c.equipment.phone, c.equipment.motor].filter(Boolean).length
     total += eqCount
@@ -612,9 +839,10 @@ const equipmentTotals = computed(() => {
     if (c.maintenanceDaysLeft !== null && c.maintenanceDaysLeft < 7) {
       maintenance += 1
     }
+    if (c.isBlocked) blocked += 1
   })
   lost = Math.floor(total * 0.02) // %2 kayip orani mock
-  return { total, active, maintenance, lost }
+  return { total, active, maintenance, lost, blocked }
 })
 
 const equipmentKpiCards = computed(() => [
@@ -622,6 +850,7 @@ const equipmentKpiCards = computed(() => [
   { icon: Activity, label: 'Aktif', value: equipmentTotals.value.active, sub: 'kullanilmakta', color: 'text-green-600', bg: 'bg-green-50 dark:bg-green-900/20' },
   { icon: Wrench, label: 'Bakimda', value: equipmentTotals.value.maintenance, sub: 'bakim gerekli', color: 'text-orange-600', bg: 'bg-orange-50 dark:bg-orange-900/20' },
   { icon: ShieldAlert, label: 'Kayip', value: equipmentTotals.value.lost, sub: 'kayip/hasarli', color: 'text-red-600', bg: 'bg-red-50 dark:bg-red-900/20' },
+  { icon: Ban, label: 'Bloklu Kurye', value: equipmentTotals.value.blocked, sub: 'dispatch engelli', color: 'text-red-700', bg: 'bg-red-100 dark:bg-red-900/30' },
 ])
 
 // ========== BAKIM TAKVIMI UYARILARI ==========
@@ -797,4 +1026,94 @@ const cashTypeOptions = [
 
 // Fark nedeni secenekleri
 const cashReasons = ['Bozuk para eksik', 'Musteriden eksik alindi', 'Para ustu verildi', 'Sayim hatasi', 'Diger']
+
+// ========== ZIMMET KAPATMA MODAL ==========
+
+const zimmetModal = ref(null)
+const zimmetStep = ref(1)
+const zimmetSaving = ref(false)
+const zimmetOrderActions = ref({})
+const zimmetCashEntered = ref('0')
+const zimmetCashNote = ref('')
+const zimmetPosReceipts = ref({})
+const zimmetPosNoReceipt = ref({})
+
+// Eski clearance modal uyumlulugu
+const clearanceModal = computed(() => zimmetModal.value)
+
+function openZimmetModal(courier) {
+  zimmetModal.value = courier
+  zimmetStep.value = 1
+  zimmetOrderActions.value = {}
+  zimmetCashEntered.value = courier.cash?.toString() || '0'
+  zimmetCashNote.value = ''
+  zimmetPosReceipts.value = {}
+  zimmetPosNoReceipt.value = {}
+}
+
+// Eski uyumluluk
+function openClearanceModal(courier) {
+  openZimmetModal(courier)
+}
+
+// Adim 1 tamamlandi mi — tum acik siparisler icin aksiyon secildi mi?
+const step1Complete = computed(() => {
+  if (!zimmetModal.value) return false
+  const openOrders = zimmetModal.value.orderDetails?.filter(o =>
+    ['pending', 'in_transit', 'assigned', 'failed'].includes(o.status)
+  ) || []
+  if (openOrders.length === 0) return true
+  return openOrders.every(o => zimmetOrderActions.value[o.id]?.action)
+})
+
+// Adim 2 tamamlandi mi — nakit girildi ve POS fisleri dolu mu?
+const step2Complete = computed(() => {
+  if (!zimmetModal.value) return true
+  const cardOrders = zimmetModal.value.orderDetails?.filter(o =>
+    o.payment === 'card' && !o.paymentCleared
+  ) || []
+  return cardOrders.every(o =>
+    zimmetPosReceipts.value[o.id] || zimmetPosNoReceipt.value[o.id]
+  )
+})
+
+async function submitZimmetClear() {
+  if (!zimmetModal.value) return
+  zimmetSaving.value = true
+  try {
+    const orderActions = Object.entries(zimmetOrderActions.value).map(([orderId, v]) => ({
+      orderId,
+      action: v.action,
+      transferTo: v.transferTo || null,
+    }))
+    const posReceiptNumbers = { ...zimmetPosReceipts.value }
+
+    const res = await clearCourierZimmet(zimmetModal.value.id, {
+      cashHandedOver: parseFloat(zimmetCashEntered.value) || 0,
+      cashNote: zimmetCashNote.value,
+      orderActions,
+      posReceiptNumbers,
+    })
+
+    if (res.ok) {
+      // Yerel state guncelle
+      const idx = couriers.value.findIndex(c => c.id === zimmetModal.value.id)
+      if (idx >= 0) {
+        couriers.value[idx] = {
+          ...couriers.value[idx],
+          isBlocked: false,
+          cash: 0,
+          unclearedCash: 0,
+          unclearedCard: 0,
+        }
+      }
+      zimmetModal.value = null
+    }
+  } finally {
+    zimmetSaving.value = false
+  }
+}
+
+// Bloklu kurye sayisi
+const blockedCount = computed(() => couriers.value.filter(c => c.isBlocked).length)
 </script>

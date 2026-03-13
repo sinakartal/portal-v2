@@ -667,89 +667,42 @@ const doughnutChartOptions = computed(() => ({
   },
 }))
 
-// --- Mock Data ---
-const generateMockData = () => {
-  kpis.value = [
-    { label: 'Toplam Gelir', value: 847520, prevValue: 754200, change: 12.3, type: 'currency', icon: DollarSign, color: 'bg-green-50 text-green-500' },
-    { label: 'Toplam Maliyet', value: 523180, prevValue: 483900, change: 8.1, type: 'currency', icon: TrendingDown, color: 'bg-red-50 text-red-500' },
-    { label: 'Net Kar', value: 324340, prevValue: 270300, change: 18.7, type: 'currency', icon: TrendingUp, color: 'bg-blue-50 text-blue-500' },
-    { label: 'Kar Marji', value: 38.3, prevValue: 35.8, change: 3.2, type: 'percent', icon: Percent, color: 'bg-indigo-50 text-indigo-500' },
-    { label: 'Toplam Teslimat', value: 12847, prevValue: 11130, change: 15.4, type: 'number', icon: Package, color: 'bg-purple-50 text-purple-500' },
-    { label: 'Aktif Kurye', value: 42, prevValue: 40, change: 5.0, type: 'number', icon: Truck, color: 'bg-teal-50 text-teal-500' },
-    { label: 'Ort. Teslimat Maliyeti', value: 40.7, prevValue: 41.7, change: -2.3, type: 'currency', icon: Target, color: 'bg-amber-50 text-amber-500' },
-    { label: 'Musteri Memnuniyeti', value: 4.6, prevValue: 4.5, change: 1.5, type: 'rating', icon: Star, color: 'bg-yellow-50 text-yellow-500' },
-  ]
-
-  const courierNames = [
-    'Serkan Acar', 'Murat Yildirim', 'Hakan Tekin', 'Kemal Bas',
-    'Selim Dursun', 'Taner Gul', 'Volkan Aslan', 'Cem Ozkan',
-    'Baris Ay', 'Erkan Sahin', 'Firat Kocer', 'Deniz Uysal',
-    'Caner Aktas', 'Onur Cevik', 'Tolga Eren'
-  ]
-
-  courierProfitability.value = courierNames.map(name => {
-    const deliveries = Math.floor(Math.random() * 300) + 100
-    const revenue = deliveries * (Math.random() * 30 + 50)
-    const cost = deliveries * (Math.random() * 20 + 25)
-    const netProfit = revenue - cost
-    const margin = (netProfit / revenue * 100)
-    return {
-      name,
-      deliveries,
-      revenue: Math.round(revenue),
-      cost: Math.round(cost),
-      netProfit: Math.round(netProfit),
-      margin: margin.toFixed(1),
-      onTimeRate: Math.floor(Math.random() * 15) + 85,
-      rating: (Math.random() * 1.2 + 3.8).toFixed(1),
-      diff: Math.round((Math.random() - 0.4) * 30),
-    }
-  }).sort((a, b) => b.netProfit - a.netProfit)
-
-  const projects = [
-    'Istanbul Ana Dagitim', 'Ankara Bolge', 'Izmir Sahil', 'Antalya Turizm',
-    'Bursa Sanayi', 'Express Teslimat', 'Gida Dagitim', 'E-Ticaret Lojistik'
-  ]
-
-  projectPnL.value = projects.map(name => {
-    const orders = Math.floor(Math.random() * 2000) + 500
-    const revenue = orders * (Math.random() * 40 + 60)
-    const courierCost = orders * (Math.random() * 15 + 20)
-    const opsCost = orders * (Math.random() * 5 + 8)
-    const otherCost = orders * (Math.random() * 3 + 2)
-    const totalCost = courierCost + opsCost + otherCost
-    const netProfit = revenue - totalCost
-    const margin = (netProfit / revenue * 100)
-    return {
-      name,
-      orders,
-      revenue: Math.round(revenue),
-      courierCost: Math.round(courierCost),
-      opsCost: Math.round(opsCost),
-      otherCost: Math.round(otherCost),
-      totalCost: Math.round(totalCost),
-      netProfit: Math.round(netProfit),
-      margin: margin.toFixed(1),
-      diff: Math.round((Math.random() - 0.35) * 25),
-    }
-  }).sort((a, b) => b.revenue - a.revenue)
-
-  // Generate 30-day chart data
+// --- Build chart from real order data ---
+function buildDailyChart(orders) {
+  const today = new Date()
   const days = []
   const revData = []
   const costData = []
-  const now = new Date()
   for (let i = 29; i >= 0; i--) {
-    const d = new Date(now)
+    const d = new Date(today)
     d.setDate(d.getDate() - i)
+    const dayStr = d.toISOString().slice(0, 10)
     days.push(`${d.getDate()}.${d.getMonth() + 1}`)
-    const baseRev = 25000 + Math.random() * 12000
-    revData.push(Math.round(baseRev))
-    costData.push(Math.round(baseRev * (0.5 + Math.random() * 0.2)))
+    const dayOrders = orders.filter(o => (o.createdAt || '').startsWith(dayStr))
+    const rev = dayOrders.reduce((s, o) => s + (o.price || o.totalAmount || 0), 0)
+    const cost = dayOrders.reduce((s, o) => s + (o.cost || 0), 0)
+    revData.push(Math.round(rev))
+    costData.push(Math.round(cost))
   }
   chartDays.value = days
   chartRevenue.value = revData
   chartCost.value = costData
+}
+
+function setEmptyState() {
+  kpis.value = [
+    { label: 'Toplam Gelir', value: 0, prevValue: 0, change: 0, type: 'currency', icon: DollarSign, color: 'bg-green-50 text-green-500' },
+    { label: 'Toplam Maliyet', value: 0, prevValue: 0, change: 0, type: 'currency', icon: TrendingDown, color: 'bg-red-50 text-red-500' },
+    { label: 'Net Kar', value: 0, prevValue: 0, change: 0, type: 'currency', icon: TrendingUp, color: 'bg-blue-50 text-blue-500' },
+    { label: 'Kar Marji', value: 0, prevValue: 0, change: 0, type: 'percent', icon: Percent, color: 'bg-indigo-50 text-indigo-500' },
+    { label: 'Toplam Teslimat', value: 0, prevValue: 0, change: 0, type: 'number', icon: Package, color: 'bg-purple-50 text-purple-500' },
+    { label: 'Aktif Kurye', value: 0, prevValue: 0, change: 0, type: 'number', icon: Truck, color: 'bg-teal-50 text-teal-500' },
+    { label: 'Ort. Teslimat Maliyeti', value: 0, prevValue: 0, change: 0, type: 'currency', icon: Target, color: 'bg-amber-50 text-amber-500' },
+    { label: 'Musteri Memnuniyeti', value: 0, prevValue: 0, change: 0, type: 'rating', icon: Star, color: 'bg-yellow-50 text-yellow-500' },
+  ]
+  courierProfitability.value = []
+  projectPnL.value = []
+  buildDailyChart([])
 }
 
 // --- Data Loading ---
@@ -795,48 +748,32 @@ const loadData = async () => {
         if (ad.courierProfitability) {
           courierProfitability.value = ad.courierProfitability.map(c => ({
             ...c,
-            diff: c.diff ?? Math.round((Math.random() - 0.4) * 30),
+            diff: c.diff ?? 0,
           }))
         }
         if (ad.projectPnL) {
           projectPnL.value = ad.projectPnL.map(p => ({
             ...p,
-            diff: p.diff ?? Math.round((Math.random() - 0.35) * 25),
+            diff: p.diff ?? 0,
           }))
         }
       }
 
-      // Generate chart data even with real API data
-      generateChartData()
+      // Build chart from real order data
+      buildDailyChart(orders)
     } else {
-      generateMockData()
+      setEmptyState()
     }
   } catch (e) {
     console.error('[Analytics] API error:', e)
     error.value = 'Veriler yuklenirken hata olustu'
-    generateMockData()
+    setEmptyState()
   } finally {
     loading.value = false
   }
 }
 
-const generateChartData = () => {
-  const days = []
-  const revData = []
-  const costData = []
-  const now = new Date()
-  for (let i = 29; i >= 0; i--) {
-    const d = new Date(now)
-    d.setDate(d.getDate() - i)
-    days.push(`${d.getDate()}.${d.getMonth() + 1}`)
-    const baseRev = 25000 + Math.random() * 12000
-    revData.push(Math.round(baseRev))
-    costData.push(Math.round(baseRev * (0.5 + Math.random() * 0.2)))
-  }
-  chartDays.value = days
-  chartRevenue.value = revData
-  chartCost.value = costData
-}
+// generateChartData is now replaced by buildDailyChart(orders) above
 
 // --- Helpers ---
 const formatValue = (kpi) => {

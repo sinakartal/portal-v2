@@ -400,6 +400,68 @@ export async function deleteUser(userId) {
   })
 }
 
+// ========= ORDER & ROUTE DISPATCH =========
+
+// ─── Dispatch Koprusu ─────────────────────────────────────────────
+// NOT: PORTAL backend'e yaziyor (port 3002) — Algoritma'ya degil
+
+// Siparis durumunu guncelle (routeId + courierId dahil)
+export async function updateOrderStatus(orderId, data) {
+  return fetchJson(`${PORTAL}/api/orders/${orderId}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  })
+}
+
+// Rota kaydet
+export async function saveRoute(routeData) {
+  return fetchJson(`${PORTAL}/api/routes`, {
+    method: 'POST',
+    body: JSON.stringify(routeData),
+  })
+}
+
+// Toplu siparis durumu guncelle
+export async function bulkUpdateOrderStatus(updates) {
+  return fetchJson(`${PORTAL}/api/orders/bulk-status`, {
+    method: 'POST',
+    body: JSON.stringify({ updates }),
+  })
+}
+
+// ========= ZIMMET & BLOK =========
+
+// Kurye zimmet durumu
+export async function getCourierZimmetStatus(courierId) {
+  return fetchJson(`${PORTAL}/api/couriers/${courierId}/zimmet-status`)
+}
+
+// Tum bloklu kuryeler
+export async function getBlockedCouriers() {
+  return fetchJson(`${PORTAL}/api/couriers/blocked`)
+}
+
+// Kurye dispatch uygunlugu kontrolu
+export async function checkCourierDispatchEligibility(courierId) {
+  return fetchJson(`${PORTAL}/api/couriers/${courierId}/dispatch-eligibility`)
+}
+
+// Zimmeti kapat (nakit teslim + siparis aksiyonlari)
+export async function clearCourierZimmet(courierId, data) {
+  return fetchJson(`${PORTAL}/api/couriers/${courierId}/zimmet-clear`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+// Kurye blok durumunu guncelle
+export async function updateCourierBlock(courierId, data) {
+  return fetchJson(`${PORTAL}/api/couriers/${courierId}/block`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
 // ========= SSE EVENT STREAM =========
 
 export function connectEventStream(onEvent) {

@@ -14,7 +14,7 @@ export const MENU_SECTIONS = [
       { title: 'Fiyatlama', path: '/pricing', icon: DollarSign, permission: null },
       { title: 'Algoritma', path: '/algorithm', icon: Cpu, permission: null },
       { title: 'Siparisler', path: '/orders', icon: Package, permission: 'orders:read', badgeKey: 'activeOrders' },
-      { title: 'Zimmet & Nakit', path: '/inventory', icon: ClipboardList, permission: 'couriers:read' },
+      { title: 'Zimmet & Nakit', path: '/inventory', icon: ClipboardList, permission: 'couriers:read', beta: true },
       { title: 'Kuryeler', path: '/couriers', icon: Truck, permission: 'couriers:read', badgeKey: 'onlineCouriers' },
       { title: 'Rotalar', path: '/routes', icon: MapPin, permission: 'routes:read' },
     ],

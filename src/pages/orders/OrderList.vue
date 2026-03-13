@@ -1,8 +1,8 @@
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Plus, Search, Download, RefreshCw, Eye, UserPlus, ChevronLeft, ChevronRight, Zap, MoreHorizontal, MapPin, XCircle, Package, ArrowUpDown } from 'lucide-vue-next'
-import { getOrders, dispatchOrder, dispatchBatch, runDispatch } from '@/services/api'
+import { Plus, Search, Download, RefreshCw, Eye, UserPlus, ChevronLeft, ChevronRight, Zap, MoreHorizontal, MapPin, XCircle, Package, ArrowUpDown, Cpu } from 'lucide-vue-next'
+import { getOrders, dispatchOrder } from '@/services/api'
 import { ORDER_STATUSES } from '@/constants/menu'
 import { formatCurrency, formatDate } from '@/utils'
 
@@ -20,13 +20,41 @@ const sortBy = ref('createdAt')
 const sortDir = ref('desc')
 const openActionMenu = ref(null)
 
-// Status tabs config
+// Proje ve Sube filtreleri
+const projectFilter = ref('all')
+const branchFilter = ref('all')
+
+const PROJECTS_LIST = [
+  'Tumu',
+  'Istanbul Ana Dagitim', 'Ankara Bolge', 'Izmir Sahil',
+  'Antalya Turizm', 'Bursa Sanayi', 'Express Teslimat',
+  'Gida Dagitim', 'E-Ticaret Lojistik'
+]
+
+const branchList = computed(() => {
+  const branches = new Set(['Tumu'])
+  orders.value.forEach(o => {
+    if (o.origin?.branch) branches.add(o.origin.branch)
+    if (o.branch) branches.add(o.branch)
+  })
+  return Array.from(branches)
+})
+
+// Status tabs — operasyonel bakis acisi
 const STATUS_TABS = [
-  { key: 'all', label: 'Tumu' },
-  { key: 'pending', label: 'Bekliyor', statuses: ['pending', 'confirmed', 'processing', 'preparing'] },
-  { key: 'in_transit', label: 'Teslimatta', statuses: ['picked_up', 'assigned', 'dispatched', 'in_transit', 'arriving', 'at_location', 'attempting_delivery'] },
-  { key: 'completed', label: 'Tamamlandi', statuses: ['delivered', 'partially_delivered'] },
-  { key: 'cancelled', label: 'Iptal', statuses: ['cancelled', 'refused', 'failed_delivery', 'returned'] },
+  { key: 'all',       label: 'Tumu' },
+  { key: 'unrouted',  label: 'Rotalanmamis',  statuses: ['pending', 'confirmed', 'processing', 'preparing'],
+    description: 'Henuz bir rotaya atanmamis siparisler' },
+  { key: 'routed',    label: 'Rotalandi',      statuses: ['dispatched'],
+    description: 'Rotaya atandi, kurye henuz almadi' },
+  { key: 'in_transit',label: 'Dagitimda',      statuses: ['picked_up', 'assigned', 'in_transit', 'arriving', 'at_location', 'attempting_delivery'],
+    description: 'Kurye uzerinde, teslimatta' },
+  { key: 'delivered', label: 'Teslim Edildi',  statuses: ['delivered', 'partially_delivered'],
+    description: 'Basariyla teslim edildi' },
+  { key: 'failed',    label: 'Teslim Edilemedi', statuses: ['failed_delivery', 'refused', 'returned'],
+    description: 'Teslim basarisiz veya iade' },
+  { key: 'cancelled', label: 'Iptal',           statuses: ['cancelled'],
+    description: 'Iptal edildi' },
 ]
 
 async function loadOrders() {
@@ -44,7 +72,20 @@ async function loadOrders() {
   }
 }
 
-onMounted(() => loadOrders())
+onMounted(() => {
+  loadOrders()
+  window.addEventListener('bringo:dispatch-committed', handleDispatchEvent)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('bringo:dispatch-committed', handleDispatchEvent)
+})
+
+function handleDispatchEvent(e) {
+  loadOrders()
+  dispatchMessage.value = `Algoritma ${e.detail.routeCount} rota olusturdu — ${e.detail.orderCount} siparis guncellendi`
+  setTimeout(() => { dispatchMessage.value = '' }, 5000)
+}
 
 // Filtered + sorted
 const filtered = computed(() => {
@@ -54,6 +95,23 @@ const filtered = computed(() => {
   if (statusTab.value !== 'all') {
     const tab = STATUS_TABS.find(t => t.key === statusTab.value)
     if (tab?.statuses) result = result.filter(o => tab.statuses.includes(o.status))
+  }
+
+  // Proje filtresi
+  if (projectFilter.value && projectFilter.value !== 'all' && projectFilter.value !== 'Tumu') {
+    result = result.filter(o =>
+      o.project === projectFilter.value ||
+      o.origin?.project === projectFilter.value ||
+      o.projectName === projectFilter.value
+    )
+  }
+
+  // Sube filtresi
+  if (branchFilter.value && branchFilter.value !== 'all' && branchFilter.value !== 'Tumu') {
+    result = result.filter(o =>
+      o.branch === branchFilter.value ||
+      o.origin?.branch === branchFilter.value
+    )
   }
 
   // Search
@@ -88,12 +146,12 @@ const tabCounts = computed(() => {
   const counts = {}
   STATUS_TABS.forEach(tab => {
     if (tab.key === 'all') counts.all = orders.value.length
-    else counts[tab.key] = orders.value.filter(o => tab.statuses.includes(o.status)).length
+    else counts[tab.key] = orders.value.filter(o => tab.statuses?.includes(o.status)).length
   })
   return counts
 })
 
-watch([search, statusTab], () => { currentPage.value = 1 })
+watch([search, statusTab, projectFilter, branchFilter], () => { currentPage.value = 1 })
 
 const totalPages = computed(() => Math.max(1, Math.ceil(filtered.value.length / perPage)))
 const paginatedOrders = computed(() => filtered.value.slice((currentPage.value - 1) * perPage, currentPage.value * perPage))
@@ -135,21 +193,6 @@ async function handleDispatchSingle(orderId) {
   await dispatchOrder(orderId)
   dispatchLoading.value = false
   dispatchMessage.value = 'Siparis dispatch edildi'
-  setTimeout(() => { dispatchMessage.value = '' }, 3000)
-}
-async function handleDispatchSelected() {
-  if (selectedOrders.value.length === 0) return
-  dispatchLoading.value = true; dispatchMessage.value = ''
-  await dispatchBatch(selectedOrders.value)
-  dispatchLoading.value = false
-  dispatchMessage.value = `${selectedOrders.value.length} siparis dispatch edildi`
-  setTimeout(() => { dispatchMessage.value = '' }, 3000)
-}
-async function handleRunDispatch() {
-  dispatchLoading.value = true; dispatchMessage.value = ''
-  const res = await runDispatch()
-  dispatchLoading.value = false
-  dispatchMessage.value = res.ok ? 'Toplu dispatch tamamlandi' : 'Dispatch islemi basladi'
   setTimeout(() => { dispatchMessage.value = '' }, 3000)
 }
 </script>
@@ -194,17 +237,15 @@ async function handleRunDispatch() {
         <p class="text-sm text-slate-500 mt-1">{{ filtered.length }} siparis listeleniyor</p>
       </div>
       <div class="flex gap-2">
-        <button
-          @click="handleRunDispatch"
-          :disabled="dispatchLoading"
-          class="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-sm font-medium transition-colors cursor-pointer disabled:opacity-50"
-        >
-          <Zap :size="16" :class="dispatchLoading ? 'animate-pulse' : ''" /> Toplu Dispatch
+        <button @click="router.push('/algorithm')"
+          class="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-medium transition-colors cursor-pointer">
+          <Cpu :size="16" /> Algoritma ile Dispatch
         </button>
         <button class="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 transition-colors cursor-pointer">
           <Download :size="16" /> Export
         </button>
-        <button @click="router.push('/orders/new')" class="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg text-sm font-medium transition-colors cursor-pointer">
+        <button @click="router.push('/orders/new')"
+          class="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg text-sm font-medium transition-colors cursor-pointer">
           <Plus :size="16" /> Yeni Siparis
         </button>
       </div>
@@ -218,21 +259,31 @@ async function handleRunDispatch() {
       </div>
     </Transition>
 
-    <!-- Status Tabs + Search -->
+    <!-- Status Tabs + Search + Filters -->
     <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-700 mb-4">
-      <!-- Status tab bar -->
-      <div class="flex items-center gap-0 px-4 pt-3 border-b border-slate-100 dark:border-slate-700">
+
+      <!-- Status Tabs -->
+      <div class="flex items-center gap-0 px-4 pt-3 border-b border-slate-100 dark:border-slate-700 overflow-x-auto">
         <button
           v-for="tab in STATUS_TABS" :key="tab.key"
           @click="statusTab = tab.key"
           :class="[
-            'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors cursor-pointer -mb-px',
+            'flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors cursor-pointer -mb-px whitespace-nowrap',
             statusTab === tab.key
               ? 'border-primary text-primary'
               : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
           ]"
+          :title="tab.description"
         >
+          <span v-if="tab.key === 'unrouted'"  class="w-1.5 h-1.5 rounded-full bg-slate-400 flex-shrink-0" />
+          <span v-else-if="tab.key === 'routed'" class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />
+          <span v-else-if="tab.key === 'in_transit'" class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse flex-shrink-0" />
+          <span v-else-if="tab.key === 'delivered'" class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+          <span v-else-if="tab.key === 'failed'" class="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0" />
+          <span v-else-if="tab.key === 'cancelled'" class="w-1.5 h-1.5 rounded-full bg-slate-300 flex-shrink-0" />
+
           {{ tab.label }}
+
           <span
             :class="[
               'min-w-[20px] h-5 px-1.5 text-[10px] font-bold rounded-full flex items-center justify-center',
@@ -243,17 +294,35 @@ async function handleRunDispatch() {
           </span>
         </button>
       </div>
-      <!-- Search bar -->
-      <div class="flex items-center gap-3 p-3">
-        <div class="relative flex-1">
+
+      <!-- Arama + Proje/Sube Filtresi -->
+      <div class="flex items-center gap-3 p-3 flex-wrap">
+        <div class="relative flex-1 min-w-[200px]">
           <Search :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text" v-model="search"
-            placeholder="Siparis no, musteri, telefon veya adres ara..."
+            placeholder="Siparis no, musteri, telefon veya adres..."
             class="w-full pl-9 pr-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
           />
         </div>
-        <button v-if="search || statusTab !== 'all'" @click="search = ''; statusTab = 'all'" class="flex items-center gap-1.5 px-3 py-2 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
+
+        <select v-model="projectFilter"
+          class="px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/20 min-w-[160px]">
+          <option value="all">Tum Projeler</option>
+          <option v-for="p in PROJECTS_LIST.slice(1)" :key="p" :value="p">{{ p }}</option>
+        </select>
+
+        <select v-model="branchFilter"
+          class="px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/20 min-w-[140px]">
+          <option value="all">Tum Subeler</option>
+          <option v-for="b in branchList.slice(1)" :key="b" :value="b">{{ b }}</option>
+        </select>
+
+        <button
+          v-if="search || statusTab !== 'all' || projectFilter !== 'all' || branchFilter !== 'all'"
+          @click="search = ''; statusTab = 'all'; projectFilter = 'all'; branchFilter = 'all'"
+          class="flex items-center gap-1.5 px-3 py-2 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+        >
           <RefreshCw :size="14" /> Sifirla
         </button>
       </div>
@@ -264,9 +333,6 @@ async function handleRunDispatch() {
       <div v-if="selectedOrders.length > 0" class="bg-primary/5 border border-primary/20 rounded-xl p-3 mb-4 flex items-center justify-between">
         <span class="text-sm text-primary font-medium">{{ selectedOrders.length }} siparis secildi</span>
         <div class="flex gap-2">
-          <button @click="handleDispatchSelected" :disabled="dispatchLoading" class="px-3 py-1.5 bg-emerald-500 text-white rounded-lg text-xs font-medium cursor-pointer disabled:opacity-50 flex items-center gap-1">
-            <Zap :size="13" /> Dispatch Et
-          </button>
           <button class="px-3 py-1.5 bg-primary text-white rounded-lg text-xs font-medium cursor-pointer">Rotaya Ekle</button>
           <button class="px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium cursor-pointer">Kurye Ata</button>
           <button class="px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium cursor-pointer flex items-center gap-1">
@@ -294,6 +360,7 @@ async function handleRunDispatch() {
               <th class="text-left px-4 py-3 font-medium text-slate-500">Ilce</th>
               <th class="text-left px-4 py-3 font-medium text-slate-500">Durum</th>
               <th class="text-left px-4 py-3 font-medium text-slate-500">Kurye</th>
+              <th class="text-left px-4 py-3 font-medium text-slate-500">Rota</th>
               <th class="text-left px-4 py-3 font-medium text-slate-500 cursor-pointer select-none" @click="toggleSort('totalPrice')">
                 <span class="flex items-center gap-1">Tutar <ArrowUpDown :size="12" class="text-slate-300" /></span>
               </th>
@@ -335,6 +402,15 @@ async function handleRunDispatch() {
               <td class="px-4 py-3">
                 <span v-if="order.courier" class="text-slate-600 dark:text-slate-400">{{ order.courier }}</span>
                 <span v-else class="px-2 py-0.5 bg-red-50 dark:bg-red-900/20 text-red-500 rounded-full text-[10px] font-medium">Atanmadi</span>
+              </td>
+              <td class="px-4 py-3">
+                <div v-if="order.routeId" class="flex items-center gap-1.5">
+                  <div class="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
+                  <span class="text-xs font-mono text-blue-600 dark:text-blue-400">
+                    {{ order.routeId.slice(-6).toUpperCase() }}
+                  </span>
+                </div>
+                <span v-else class="text-xs text-slate-300 dark:text-slate-600">—</span>
               </td>
               <td class="px-4 py-3 font-medium text-slate-700 dark:text-slate-200">{{ formatCurrency(order.totalPrice) }}</td>
               <td class="px-4 py-3 text-slate-500">{{ formatDate(order.createdAt) }}</td>
@@ -378,7 +454,7 @@ async function handleRunDispatch() {
         </div>
         <h3 class="text-base font-semibold text-slate-700 dark:text-slate-300 mb-1">Siparis bulunamadi</h3>
         <p class="text-sm text-slate-400 mb-4 text-center max-w-xs">Arama kriterlerine uygun siparis yok. Filtreleri degistirmeyi deneyin.</p>
-        <button @click="search = ''; statusTab = 'all'" class="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-medium cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+        <button @click="search = ''; statusTab = 'all'; projectFilter = 'all'; branchFilter = 'all'" class="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-medium cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
           Filtreleri Temizle
         </button>
       </div>

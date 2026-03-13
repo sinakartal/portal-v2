@@ -1005,7 +1005,7 @@ const tabs = [
   { id: 'zimmet', label: 'Kurye Zimmet', icon: ClipboardList },
   { id: 'hakedis', label: 'Kurye Hakedis', icon: Wallet },
   { id: 'siparis', label: 'Siparis Raporu', icon: Package },
-  { id: 'musteri', label: 'Musteri Raporu', icon: Users },
+  // { id: 'musteri', label: 'Musteri Raporu', icon: Users }, // Veri kaynagi hazir degil
   { id: 'karlilik', label: 'Karlilik', icon: TrendingUp },
   { id: 'algoritma', label: 'Algoritma AI', icon: Cpu },
 ]
@@ -1183,253 +1183,19 @@ const karlilikKuryeToplamMarj = computed(() => {
   return rev > 0 ? (profit / rev * 100).toFixed(1) : '0'
 })
 
-// ==================== MOCK DATA URETICI ====================
-const generateMockData = () => {
-  // Tab 1: Zimmet — kuryenin uzerindeki siparisler, urunler ve nakit
-  const productPool = [
-    'Laptop', 'Tablet', 'Telefon', 'Kulaklik', 'Sarj Aleti', 'Klavye',
-    'Mouse', 'Monitor', 'Kablo Seti', 'Powerbank', 'USB Bellek', 'SSD Disk',
-    'Yazici Toneri', 'Kamera', 'Hoparlor', 'Akilli Saat', 'Oyun Konsolu',
-    'Vitamin Seti', 'Protein Tozu', 'Kahve Paketi', 'Cay Seti', 'Biskuvi Kutu',
-  ]
-  const orderCustomerNames = [
-    'Ahmet Yilmaz', 'Mehmet Demir', 'Ayse Kaya', 'Fatma Celik',
-    'Ali Ozturk', 'Zeynep Arslan', 'Mustafa Dogan', 'Emine Sahin',
-    'Huseyin Koc', 'Hacer Yildiz', 'Omer Polat', 'Merve Aksoy',
-  ]
-
-  zimmetData.value = courierNames.map((name, i) => {
-    const orderCount = Math.floor(Math.random() * 4) // 0-3 siparis
-    const orders = Array.from({ length: orderCount }, (_, j) => {
-      const itemCount = Math.floor(Math.random() * 3) + 1 // 1-3 urun
-      const items = Array.from({ length: itemCount }, () =>
-        productPool[Math.floor(Math.random() * productPool.length)]
-      )
-      return {
-        id: `SIP-${String(100100 + i * 10 + j)}`,
-        customer: orderCustomerNames[(i + j) % orderCustomerNames.length],
-        items,
-      }
-    })
-    const nakitZimmet = Math.random() > 0.4 ? Math.floor(Math.random() * 2000) + 100 : 0
-    const durum = orderCount > 0 ? (Math.random() > 0.5 ? 'dagitimda' : 'teslim_bekliyor') : 'bos'
-    return {
-      id: `z-${i}`,
-      courier: name,
-      phone: `053${Math.floor(Math.random() * 9000000 + 1000000)}`,
-      orders,
-      nakitZimmet,
-      durum,
-    }
-  })
-
-  const allOrders = zimmetData.value.flatMap(r => r.orders)
-  zimmetKpis.value = {
-    toplamSiparis: allOrders.length,
-    toplamUrun: allOrders.reduce((s, o) => s + o.items.length, 0),
-    toplamNakit: zimmetData.value.reduce((s, r) => s + r.nakitZimmet, 0),
-    nakitliKurye: zimmetData.value.filter(r => r.nakitZimmet > 0).length,
-  }
-
-  // Tab 2: Hakedis — paket basi, km, bonus/ek, kesinti
-  const hakedisStatuses = ['pending', 'approved', 'paid', 'paid', 'paid']
-  hakedisData.value = courierNames.map((name, i) => {
-    const deliveries = Math.floor(Math.random() * 250) + 80
-    const perPackage = Math.round((Math.random() * 12 + 22) * 100) / 100
-    const gross = Math.round(deliveries * perPackage)
-    const km = Math.floor(Math.random() * 800) + 200
-    const bonus = Math.random() > 0.4 ? Math.floor(Math.random() * 500) + 100 : 0
-    const deductions = Math.random() > 0.6 ? Math.floor(Math.random() * 300) + 50 : 0
-    const net = gross + bonus - deductions
-    return {
-      id: `h-${i}`,
-      courier: name,
-      period: 'Subat 2026',
-      deliveries,
-      perPackage,
-      gross,
-      km,
-      bonus,
-      deductions,
-      net,
-      status: hakedisStatuses[i % hakedisStatuses.length],
-    }
-  })
-
-  hakedisKpis.value = {
-    toplamBrut: hakedisData.value.reduce((s, r) => s + r.gross, 0),
-    toplamNet: hakedisData.value.reduce((s, r) => s + r.net, 0),
-    ortHakedis: Math.round(hakedisData.value.reduce((s, r) => s + r.net, 0) / hakedisData.value.length),
-    odemeBekleyen: hakedisData.value.filter(r => r.status === 'pending').length,
-  }
-
-  // Tab 3: Siparis — tum hareketlerin detayli raporu
-  const statuses = ['delivered', 'delivered', 'delivered', 'in_transit', 'assigned', 'pending', 'failed', 'cancelled']
-  const orderCustomers = [
-    'Ahmet Yilmaz', 'Mehmet Demir', 'Ayse Kaya', 'Fatma Celik',
-    'Ali Ozturk', 'Zeynep Arslan', 'Mustafa Dogan', 'Emine Sahin',
-    'Huseyin Koc', 'Hacer Yildiz', 'Ibrahim Aydin', 'Hatice Ozkan',
-    'Omer Polat', 'Merve Aksoy', 'Burak Kilic', 'Selin Erdogan',
-    'Can Korkmaz', 'Elif Sen', 'Emre Gunes', 'Derya Ozer'
-  ]
-  const regions = ['Kadikoy', 'Besiktas', 'Uskudar', 'Sisli', 'Bakirkoy', 'Maltepe', 'Atasehir', 'Beylikduzu', 'Kartal', 'Pendik']
-  const dropNames = [
-    'Merkez Depo', 'Sube A', 'Sube B', 'Cadde Magaza', 'AVM Nokta',
-    'Express Nokta', 'Mahalle Teslim', 'Is Merkezi', 'Kargo Nokta', 'Park Teslim'
-  ]
-  const plates = ['34 ABC 123', '34 DEF 456', '34 GHI 789', '34 JKL 012', '06 MNO 345', '06 PRS 678', '35 TUV 901', '35 XYZ 234']
-  const cancelReasons = [null, null, null, null, 'Musteri istegi', 'Stok yetersiz', 'Adres hatasi']
-  const failReasons = [null, null, null, 'Musteri bulunamadi', 'Adres yanlis', 'Kapaliydi', 'Randevu disinda']
-  const failNotes = [null, null, null, 'Kapida kimse yoktu', 'Zil bozuk', 'Yanlis bina', '2. deneme yapilacak']
-  const failTypes = [null, null, null, 'musteri_yok', 'adres_hatasi', 'kapali', 'randevu_disi']
-
-  siparisData.value = Array.from({ length: 30 }, (_, i) => {
-    const status = statuses[i % statuses.length]
-    const day = Math.floor(Math.random() * 18) + 1
-    const orderDate = `${String(day).padStart(2, '0')}.02.2026`
-    const baseHour = 8 + Math.floor(Math.random() * 10)
-    const baseMin = Math.floor(Math.random() * 60)
-    const deliveryDuration = status === 'delivered' ? Math.floor(Math.random() * 50) + 15 : null
-    const estimatedSales = Math.floor(Math.random() * 800) + 50
-    const kdvRate = 0.20
-    const estimatedKdv = Math.round(estimatedSales * kdvRate)
-    const totalAmount = estimatedSales + estimatedKdv
-    const cashPosRatio = Math.random()
-    const totalCashPos = Math.round(totalAmount * cashPosRatio)
-    const cost = Math.floor(Math.random() * 200) + 30
-    const estimatedProfit = estimatedSales - cost
-    const lat = (40.98 + Math.random() * 0.04).toFixed(4)
-    const lng = (29.01 + Math.random() * 0.04).toFixed(4)
-
-    const courierDeliveryDate = status === 'delivered' ? `${orderDate} ${String(baseHour + 1).padStart(2, '0')}:${String(baseMin).padStart(2, '0')}` : null
-    const customerDeliveryDate = status === 'delivered' ? `${orderDate} ${String(baseHour + 1).padStart(2, '0')}:${String((baseMin + (deliveryDuration || 0)) % 60).padStart(2, '0')}` : null
-    const plannedDelivery = `${orderDate} ${String(baseHour + 2).padStart(2, '0')}:00`
-
-    return {
-      id: `SIP-${String(100001 + i)}`,
-      dbId: 50000 + i,
-      orderNo: `SIP-${String(100001 + i)}`,
-      refNo: `REF-${String(200001 + i)}`,
-      project: projects[i % projects.length],
-      region: regions[i % regions.length],
-      dropId: `DN-${String(3000 + i)}`,
-      dropRefId: `DNR-${String(4000 + i)}`,
-      dropName: dropNames[i % dropNames.length],
-      customer: orderCustomers[i % orderCustomers.length],
-      customerPhone: `053${Math.floor(Math.random() * 9000000 + 1000000)}`,
-      plannedDelivery,
-      status,
-      statusConfig: siparisStatusConfig[status],
-      cancelReason: status === 'cancelled' ? cancelReasons[Math.floor(Math.random() * cancelReasons.length)] || 'Musteri istegi' : null,
-      failReason: status === 'failed' ? failReasons[Math.floor(Math.random() * failReasons.length)] || 'Musteri bulunamadi' : null,
-      failNote: status === 'failed' ? failNotes[Math.floor(Math.random() * failNotes.length)] || 'Kapida kimse yoktu' : null,
-      failType: status === 'failed' ? failTypes[Math.floor(Math.random() * failTypes.length)] || 'musteri_yok' : null,
-      orderDate,
-      courierDeliveryDate,
-      customerDeliveryDate,
-      deliveryDuration,
-      estimatedSales,
-      totalAmount,
-      totalCashPos,
-      estimatedKdv,
-      estimatedProfit,
-      deliveryCoord: `${lat}, ${lng}`,
-      deliveryPlate: plates[i % plates.length],
-    }
-  })
-
-  const deliveredOrders = siparisData.value.filter(r => r.status === 'delivered')
-  siparisKpis.value = {
-    toplam: siparisData.value.length,
-    teslimEdilen: deliveredOrders.length,
-    basarisiz: siparisData.value.filter(r => r.status === 'failed' || r.status === 'cancelled').length,
-    ortSure: deliveredOrders.length > 0 ? Math.round(deliveredOrders.reduce((s, r) => s + (r.deliveryDuration || 0), 0) / deliveredOrders.length) : 0,
-  }
-
-  // Tab 4: Musteri
-  const paymentStatuses = ['paid', 'paid', 'partial', 'pending', 'overdue']
-  musteriData.value = customers.map((name, i) => {
-    const orderCount = Math.floor(Math.random() * 500) + 50
-    const unitPrice = Math.floor(Math.random() * 30) + 25
-    const totalAmount = orderCount * unitPrice
-    const kdv = Math.round(totalAmount * 0.20)
-    const invoiceTotal = totalAmount + kdv
-    const paymentStatus = paymentStatuses[i % paymentStatuses.length]
-    return {
-      id: `m-${i}`,
-      customer: name,
-      project: projects[i % projects.length],
-      orderCount,
-      unitPrice,
-      totalAmount,
-      kdv,
-      invoiceTotal,
-      paymentStatus,
-    }
-  })
-
-  const paidCustomers = musteriData.value.filter(r => r.paymentStatus === 'paid')
-  const pendingCustomers = musteriData.value.filter(r => r.paymentStatus !== 'paid')
-  musteriKpis.value = {
-    toplamMusteri: musteriData.value.length,
-    toplamFatura: musteriData.value.reduce((s, r) => s + r.invoiceTotal, 0),
-    odenen: paidCustomers.reduce((s, r) => s + r.invoiceTotal, 0),
-    bekleyen: pendingCustomers.reduce((s, r) => s + r.invoiceTotal, 0),
-  }
-
-  // Tab 5: Karlilik - Proje
-  karlilikProjeData.value = projects.map(name => {
-    const orders = Math.floor(Math.random() * 2000) + 500
-    const revenue = orders * (Math.random() * 40 + 60)
-    const courierCost = orders * (Math.random() * 15 + 20)
-    const opsCost = orders * (Math.random() * 5 + 8)
-    const netProfit = revenue - courierCost - opsCost
-    const margin = (netProfit / revenue * 100)
-    return {
-      name,
-      orders,
-      revenue: Math.round(revenue),
-      courierCost: Math.round(courierCost),
-      opsCost: Math.round(opsCost),
-      netProfit: Math.round(netProfit),
-      margin: margin.toFixed(1),
-    }
-  }).sort((a, b) => b.revenue - a.revenue)
-
-  // Tab 5: Karlilik - Sube
-  karlilikSubeData.value = branches.map(name => {
-    const orders = Math.floor(Math.random() * 1500) + 300
-    const revenue = orders * (Math.random() * 35 + 55)
-    const cost = orders * (Math.random() * 20 + 25)
-    const netProfit = revenue - cost
-    const margin = (netProfit / revenue * 100)
-    return {
-      name,
-      orders,
-      revenue: Math.round(revenue),
-      cost: Math.round(cost),
-      netProfit: Math.round(netProfit),
-      margin: margin.toFixed(1),
-    }
-  }).sort((a, b) => b.revenue - a.revenue)
-
-  // Tab 5: Karlilik - Kurye
-  karlilikKuryeData.value = courierNames.map(name => {
-    const deliveries = Math.floor(Math.random() * 300) + 100
-    const revenue = deliveries * (Math.random() * 30 + 50)
-    const cost = deliveries * (Math.random() * 20 + 25)
-    const netProfit = revenue - cost
-    const margin = (netProfit / revenue * 100)
-    return {
-      name,
-      deliveries,
-      revenue: Math.round(revenue),
-      cost: Math.round(cost),
-      netProfit: Math.round(netProfit),
-      margin: margin.toFixed(1),
-      rating: (Math.random() * 1.2 + 3.8).toFixed(1),
-    }
-  }).sort((a, b) => b.netProfit - a.netProfit)
+// ==================== EMPTY STATE HELPER ====================
+function setEmptyReportState() {
+  zimmetData.value = []
+  zimmetKpis.value = { toplamSiparis: 0, toplamUrun: 0, toplamNakit: 0, nakitliKurye: 0 }
+  hakedisData.value = []
+  hakedisKpis.value = { toplamBrut: 0, toplamNet: 0, ortHakedis: 0, odemeBekleyen: 0 }
+  siparisData.value = []
+  siparisKpis.value = { toplam: 0, teslimEdilen: 0, basarisiz: 0, ortSure: 0 }
+  musteriData.value = []
+  musteriKpis.value = { toplamMusteri: 0, toplamFatura: 0, odenen: 0, bekleyen: 0 }
+  karlilikProjeData.value = []
+  karlilikSubeData.value = []
+  karlilikKuryeData.value = []
 }
 
 onMounted(async () => {
@@ -1520,22 +1286,47 @@ onMounted(async () => {
         }
       }
 
-      // If no data was populated, use mock
-      if (siparisData.value.length === 0 && zimmetData.value.length === 0) {
-        generateMockData()
-      } else {
-        // Generate remaining mock data for tabs not covered by API
-        if (zimmetData.value.length === 0 || hakedisData.value.length === 0 || musteriData.value.length === 0 || karlilikProjeData.value.length === 0) {
-          generateMockData()
+      // Tab 2: Hakedis - compute from couriers
+      if (couriers.length > 0 && hakedisData.value.length === 0) {
+        hakedisData.value = couriers.map((c, i) => {
+          const deliveries = c.deliveryCount || c.totalDeliveries || 0
+          const perPackage = c.perDeliveryRate || 0
+          const gross = Math.round(deliveries * perPackage)
+          const km = c.totalKm || 0
+          const bonus = c.bonus || 0
+          const deductions = c.deductions || 0
+          const net = gross + bonus - deductions
+          return {
+            id: c.id || c._id || `h-${i}`,
+            courier: c.name || `Kurye ${i + 1}`,
+            period: new Date().toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' }),
+            deliveries, perPackage, gross, km, bonus, deductions, net,
+            status: c.payrollStatus || 'pending',
+          }
+        })
+        hakedisKpis.value = {
+          toplamBrut: hakedisData.value.reduce((s, r) => s + r.gross, 0),
+          toplamNet: hakedisData.value.reduce((s, r) => s + r.net, 0),
+          ortHakedis: hakedisData.value.length > 0 ? Math.round(hakedisData.value.reduce((s, r) => s + r.net, 0) / hakedisData.value.length) : 0,
+          odemeBekleyen: hakedisData.value.filter(r => r.status === 'pending').length,
         }
       }
+
+      // Tab 4: Musteri - not available yet
+      musteriData.value = []
+      musteriKpis.value = { toplamMusteri: 0, toplamFatura: 0, odenen: 0, bekleyen: 0 }
+
+      // Tab 5: Karlilik - empty until analytics API
+      karlilikProjeData.value = []
+      karlilikSubeData.value = []
+      karlilikKuryeData.value = []
     } else {
-      generateMockData()
+      setEmptyReportState()
     }
   } catch (e) {
     console.error('[Reports] API error:', e)
     error.value = 'Veriler yuklenirken hata olustu'
-    generateMockData()
+    setEmptyReportState()
   } finally {
     loading.value = false
   }

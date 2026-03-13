@@ -2,12 +2,15 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
 export const useCopilotContextStore = defineStore('copilotContext', () => {
-  // Dashboard feeds these refs
+  // Dashboard bu ref'leri besler
   const orders = ref([])
   const routes = ref([])
   const couriers = ref([])
   const stats = ref(null)
   const selectedAlgorithms = ref(null)
+
+  // Dashboard'daki action handler — CopilotPanel buraya yazar
+  const actionHandler = ref(null)
 
   function setSimulationData({ orders: o, routes: r, couriers: c, stats: s, algorithms: a }) {
     if (o) orders.value = o
@@ -15,6 +18,19 @@ export const useCopilotContextStore = defineStore('copilotContext', () => {
     if (c) couriers.value = c
     if (s) stats.value = s
     if (a) selectedAlgorithms.value = a
+  }
+
+  // Dashboard tarafından set edilir — copilot'un tetikleyeceği fonksiyon
+  function registerActionHandler(fn) {
+    actionHandler.value = fn
+  }
+
+  async function executeAction(action) {
+    if (!actionHandler.value) {
+      console.warn('[Copilot] Action handler kayıtlı değil')
+      return { success: false, error: 'Handler yok' }
+    }
+    return actionHandler.value(action)
   }
 
   const summary = computed(() => {
@@ -32,5 +48,10 @@ export const useCopilotContextStore = defineStore('copilotContext', () => {
     }
   })
 
-  return { orders, routes, couriers, stats, selectedAlgorithms, setSimulationData, summary }
+  return {
+    orders, routes, couriers, stats, selectedAlgorithms,
+    actionHandler,
+    setSimulationData, registerActionHandler, executeAction,
+    summary,
+  }
 })

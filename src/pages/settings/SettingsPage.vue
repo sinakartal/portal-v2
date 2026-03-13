@@ -794,7 +794,7 @@ function copyApiKey() {
 async function handleRegenerateApiKey() {
   if (!confirm('API anahtari yenilenecek. Eski anahtar calismayacak. Emin misiniz?')) return
   const auth = useAuthStore()
-  const projectId = auth.activeProjectId || 'default'
+  const projectId = auth.activeProjectId || auth.user?.defaultProject || 'default'
   try {
     const { regenerateApiKey } = await import('@/services/api')
     const res = await regenerateApiKey(auth.token, projectId)

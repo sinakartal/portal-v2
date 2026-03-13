@@ -53,13 +53,14 @@ const router = createRouter({
   routes: getRoutes(),
 })
 
-router.beforeEach((to, from, next) => {
-  const token = localStorage.getItem('bringo_token')
-  if (to.matched.some(record => record.meta.requiresAuth) && !token) {
-    next('/login')
-  } else {
-    next()
+router.beforeEach(async (to, from, next) => {
+  if (to.matched.some(record => record.meta.requiresAuth)) {
+    const { useAuthStore } = await import('@/stores/auth')
+    const auth = useAuthStore()
+    const valid = await auth.verifyToken()
+    if (!valid) return next('/login')
   }
+  next()
 })
 
 export default router

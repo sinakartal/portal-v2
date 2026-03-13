@@ -22,3 +22,12 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Backend persistent data
+backend/data/
+data/
+
+# Environment files
+.env
+.env.local
+.env.production

@@ -14,8 +14,9 @@ import {
   Package, MapPin, Truck, CheckCircle, Clock, Wallet, XCircle, Star,
   Plus, Route, FileText, AlertTriangle, Building2, CalendarDays, FolderKanban,
   LayoutDashboard, Navigation, Search, Layers, X, Zap, Coffee, WifiOff,
-  Users, Activity, Bell, ChevronRight, Map as MapIcon,
+  Users, Activity, Bell, ChevronRight, ChevronDown, Map as MapIcon,
   DollarSign, TrendingUp, RefreshCw, Cpu, Play, Globe, Sliders, Settings,
+  Minimize2,
 } from 'lucide-vue-next'
 import { Line, Bar, Doughnut } from 'vue-chartjs'
 import {
@@ -39,6 +40,8 @@ import {
   getPricingRules, getSurgeStatus, addPricingRule, deletePricingRule,
   getAlgorithmConfig, updateAlgorithmConfig, runDispatch, runDispatchOsrm,
   batchReroute, getOsrmHealth, getVroomHealth,
+  saveRoute, updateOrderStatus, bulkUpdateOrderStatus,
+  checkCourierDispatchEligibility,
 } from '@/services/api'
 import { ORDER_STATUSES } from '@/constants/menu'
 import { timeAgo, formatCurrency, formatNumber } from '@/utils'
@@ -48,6 +51,16 @@ import { useCopilotContextStore } from '@/stores/copilotContext'
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Title, Tooltip, Legend, Filler)
 
 const copilotCtx = useCopilotContextStore()
+
+// ─── Copilot Action Handler ───────────────────────────────────────
+// CopilotPanel'in executeAction() çağırdığında buraya gelir
+copilotCtx.registerActionHandler(async (action) => {
+  try {
+    return await handleCopilotAction(action)
+  } catch (e) {
+    return { success: false, error: e.message }
+  }
+})
 
 // Doughnut chart renk paleti
 const PIE_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#6b7280']
@@ -568,6 +581,8 @@ const surgeData = ref({ active: false, multiplier: 1.0, zones: [] })
 const newRule = ref({ name: '', type: 'per_delivery', value: 0, condition: '' })
 const showAddRule = ref(false)
 const pricingParamsSaving = ref(false)
+const showTimingParams = ref(false)
+const pricingRouteDetail = ref(null)
 
 // ========== FIYATLAMA PARAMETRELERI ==========
 const pricingParams = reactive({
@@ -983,6 +998,7 @@ const algoSimReasons = ref([])
 const algoSimReasonsOpen = ref(false)
 const algoSimSuggestions = ref([])
 const algoSimSuggestionsOpen = ref(false)
+const algoAutoOptimized = ref(false)
 
 // ─── AUTO-PILOT & LEARNING ───
 const algoAutoPilot = ref(false)
@@ -1209,15 +1225,12 @@ function saveTrialToHistory() {
   const profile = getOrderProfile(orders)
   const s = algoSimStats.value
   const routes = algoSimRoutes.value
-  const avgCourierScore = routes.length > 0
-    ? Math.round(routes.reduce((sum, r) => sum + (r.courierScore || 0), 0) / routes.length * 2) / 2
-    : 0
   algoLearningHistory.value.push({
     ts: Date.now(),
     profile,
     combo: { ...s.algorithms },
     score: s.efficiencyScore,
-    courierScore: avgCourierScore,
+    onTimeRate: s.onTimeRate || 0,
     totalRoutes: s.totalRoutes,
     totalOrders: parseInt(s.totalOrders),
     totalKm: parseFloat(s.totalKm),
@@ -1261,8 +1274,7 @@ function handleAutoDispatch() {
   const comboScoreCache = {}
   algoLearningHistory.value.forEach(h => {
     const key = `${h.combo.assignment}|${h.combo.routing}|${h.combo.optimization}`
-    // Kombine skor: verimlilik + kurye puani
-    const combined = (h.score || 0) * 0.6 + (h.courierScore || 0) * 0.4
+    const combined = h.score || 0
     if (!comboScoreCache[key] || combined > comboScoreCache[key]) {
       comboScoreCache[key] = combined
     }
@@ -1290,7 +1302,7 @@ function handleAutoDispatch() {
       const { a, r, o } = allCombos[i]
       try {
         const result = runSimulationTrial(trialOrders, trialCouriers, a, r, o)
-        if (result && (!best || result.combinedScore > best.combinedScore || (result.combinedScore === best.combinedScore && result.totalKm < best.totalKm))) {
+        if (result && (!best || result.score > best.score || (result.score === best.score && result.totalKm < best.totalKm))) {
           best = result
         }
         trialCount++
@@ -1335,25 +1347,50 @@ function finishAutoDispatch(best, trialCount, pastBest, profile) {
   algoAutoResult.value = {
     bestCombo: { assignment: best.assignAlgo, routing: best.routeAlgo, optimization: best.optAlgo },
     bestScore: best.score,
-    courierScore: best.courierScore,
-    combinedScore: best.combinedScore,
     trialCount,
     improvement,
     totalRoutes: best.totalRoutes,
     fromLearning: pastBest != null,
   }
 
-  nextTick(() => {
+  nextTick(async () => {
     try {
       simulateRoutes()
-      // Sonucu ogrenme gecmisine kaydet
       saveTrialToHistory()
+
+      // Gercek API'ya yaz
+      const { routeCount, orderCount, errors } = await commitDispatchToRealOrders()
+
       const aName = getAlgoById(best.assignAlgo)?.name || best.assignAlgo
       const rName = getAlgoById(best.routeAlgo)?.name || best.routeAlgo
       const oName = getAlgoById(best.optAlgo)?.name || best.optAlgo
-      showAlgoToast(`AI secti: ${aName} → ${rName} → ${oName} (${best.score}/10)`, 'success')
+
+      if (errors.length === 0) {
+        showAlgoToast(
+          `${aName} → ${rName} → ${oName} (${best.score}/10) — ${routeCount} rota, ${orderCount} siparis kaydedildi`,
+          'success'
+        )
+      } else {
+        showAlgoToast(
+          `Dispatch tamamlandi ancak ${errors.length} hata olustu.`,
+          'error'
+        )
+        // Hatalari Rotalama Analizi'ne ekle
+        const newReasons = [...algoSimReasons.value]
+        newReasons.push({ type: 'error', text: `Dispatch sirasinda ${errors.length} hata olustu:` })
+        errors.forEach(err => {
+          newReasons.push({ type: 'error', text: err })
+        })
+        algoSimReasons.value = newReasons
+        algoSimReasonsOpen.value = true
+      }
     } catch (e) {
-      showAlgoToast('Auto-dispatch hatasi: ' + e.message, 'error')
+      showAlgoToast('Dispatch hatasi: ' + e.message, 'error')
+      // Genel hatayi Rotalama Analizi'ne ekle
+      const newReasons = [...algoSimReasons.value]
+      newReasons.push({ type: 'error', text: `Dispatch genel hatasi: ${e.message}` })
+      algoSimReasons.value = newReasons
+      algoSimReasonsOpen.value = true
     } finally {
       algoAutoSearching.value = false
       algoDispatching.manual = false
@@ -1483,11 +1520,9 @@ function runSimulationTrial(orders, couriers, assignAlgo, routeAlgo, optAlgo) {
   const now = algoSimBaseTime.value
 
   const assignments = assignOrdersToCouriers(orders, couriers, assignAlgo, assignParams)
-  // Merge tekli rotalari
   mergeAssignments(assignments, orders)
 
   const routes = []
-  let totalCourierScore = 0
   for (const [, orderGroup] of assignments.entries()) {
     if (orderGroup.length === 0) continue
     const waypoints = buildRouteWaypoints(orderGroup, routeAlgo, routeParams, now)
@@ -1498,21 +1533,20 @@ function runSimulationTrial(orders, couriers, assignAlgo, routeAlgo, optAlgo) {
     const orderCount = orderGroup.length
     const kmPerOrderVal = totalKm / orderCount
 
-    // Kurye puani (trial icin)
-    let cs = 0
-    const minPerOrder = (totalTimeSec / 60) / orderCount
-    cs += minPerOrder <= 8 ? 2.5 : minPerOrder <= 12 ? 2 : minPerOrder <= 18 ? 1.5 : minPerOrder <= 25 ? 1 : 0.5
-    cs += kmPerOrderVal <= 1.5 ? 2.5 : kmPerOrderVal <= 2.5 ? 2 : kmPerOrderVal <= 4 ? 1.5 : kmPerOrderVal <= 6 ? 1 : 0.5
-    cs += orderCount >= 6 ? 2.5 : orderCount >= 4 ? 2 : orderCount >= 3 ? 1.5 : orderCount >= 2 ? 1 : 0.5
+    // On-time hesapla
     const deliveries = optimized.filter(w => w.type === 'delivery')
-    const deadlineOrders = orderGroup.filter(o => o.deadline)
-    if (deadlineOrders.length > 0 && deliveries.length > 0) {
-      let met = 0
-      deliveries.forEach(wp => { const o = orderGroup.find(x => x.id === wp.orderId); if (o?.deadline && wp.arrivalTime <= o.deadline) met++ })
-      const rate = met / deliveries.length
-      cs += rate >= 0.95 ? 2.5 : rate >= 0.8 ? 2 : rate >= 0.6 ? 1.5 : rate >= 0.4 ? 1 : 0.5
-    } else { cs += 2 }
-    totalCourierScore += cs
+    let onTimeMet = 0
+    if (deliveries.length > 0) {
+      deliveries.forEach(wp => {
+        const o = orderGroup.find(x => x.id === wp.orderId)
+        if (!o) { onTimeMet++; return }
+        let ok = true
+        if (o.deadline && wp.arrivalTime > o.deadline) ok = false
+        if (o.deliveryWindow?.start && wp.arrivalTime < o.deliveryWindow.start) ok = false
+        if (ok) onTimeMet++
+      })
+    }
+    const onTimeRate = deliveries.length > 0 ? Math.round(onTimeMet / deliveries.length * 100) : 100
 
     routes.push({
       orderIds: orderGroup.map(o => o.id),
@@ -1521,7 +1555,7 @@ function runSimulationTrial(orders, couriers, assignAlgo, routeAlgo, optAlgo) {
       totalTimeSec,
       avgAddedKmPerOrder: totalKm / orderCount * (0.3 + Math.random() * 0.4),
       kmPerOrder: kmPerOrderVal,
-      courierScore: Math.round(cs * 2) / 2,
+      onTimeRate,
     })
   }
   if (routes.length === 0) return null
@@ -1531,7 +1565,7 @@ function runSimulationTrial(orders, couriers, assignAlgo, routeAlgo, optAlgo) {
   const avgSipRota = orders.length / totalRoutes
   const avgKmSip = routes.reduce((s,r) => s + r.kmPerOrder, 0) / totalRoutes
   const totalKmAll = routes.reduce((s, r) => s + r.totalDistanceKm, 0)
-  const avgCourierScore = Math.round((totalCourierScore / totalRoutes) * 2) / 2
+  const avgOnTimeRate = Math.round(routes.reduce((s, r) => s + r.onTimeRate, 0) / totalRoutes)
 
   const routeOrderCounts = routes.map(r => r.orderIds.length)
   const maxLoad = Math.max(...routeOrderCounts)
@@ -1545,12 +1579,11 @@ function runSimulationTrial(orders, couriers, assignAlgo, routeAlgo, optAlgo) {
   score += loadRatio >= 0.7 ? 2 : loadRatio >= 0.5 ? 1.5 : loadRatio >= 0.3 ? 1 : 0.5
   score += avgAddedKm <= 0.5 ? 2 : avgAddedKm <= 0.8 ? 1.5 : avgAddedKm <= 1.2 ? 1 : avgAddedKm <= 2 ? 0.5 : 0
   score += (utilizationRatio >= 0.7 && utilizationRatio <= 1.0) ? 2 : utilizationRatio >= 0.5 ? 1.5 : utilizationRatio >= 0.3 ? 1 : utilizationRatio > 1.0 ? 1 : 0.5
-  score = Math.round(score * 2) / 2
+  // On-time bonus/penalty — %95+ ise +1, %80- ise -1
+  score += avgOnTimeRate >= 95 ? 1 : avgOnTimeRate >= 80 ? 0 : -1
+  score = Math.max(0, Math.round(score * 2) / 2)
 
-  // Kombine skor: verimlilik (%60) + kurye puani (%40)
-  const combinedScore = Math.round((score * 0.6 + avgCourierScore * 0.4) * 2) / 2
-
-  return { totalRoutes, score, courierScore: avgCourierScore, combinedScore, totalKm: totalKmAll, avgKmPerOrder: avgKmSip, avgOrdersPerRoute: avgSipRota, assignAlgo, routeAlgo, optAlgo }
+  return { totalRoutes, score, totalKm: totalKmAll, avgKmPerOrder: avgKmSip, avgOrdersPerRoute: avgSipRota, avgOnTimeRate, assignAlgo, routeAlgo, optAlgo }
 }
 
 function simulateRoutes() {
@@ -1609,39 +1642,21 @@ function simulateRoutes() {
     const kmPerOrderVal = totalKm / orderCount
     const avgAddedKm = totalKm / orderCount * (0.3 + Math.random() * 0.4)
 
-    // ─── KURYE PUANI (10 uzerinden) ───
-    // Kuryenin bu rotayi ne kadar verimli/hizli tamamlayacagi
-    let courierScore = 0
-    // 1. Hiz puani (2.5p) — toplam sure kisaysa yuksek
-    const totalMin = totalTimeSec / 60
-    const minPerOrder = totalMin / orderCount
-    courierScore += minPerOrder <= 8 ? 2.5 : minPerOrder <= 12 ? 2 : minPerOrder <= 18 ? 1.5 : minPerOrder <= 25 ? 1 : 0.5
-    // 2. Mesafe verimliligi (2.5p) — km/siparis dusukse iyi
-    courierScore += kmPerOrderVal <= 1.5 ? 2.5 : kmPerOrderVal <= 2.5 ? 2 : kmPerOrderVal <= 4 ? 1.5 : kmPerOrderVal <= 6 ? 1 : 0.5
-    // 3. Siparis yogunlugu (2.5p) — cok siparis = kurye icin iyi kazanc
-    courierScore += orderCount >= 6 ? 2.5 : orderCount >= 4 ? 2 : orderCount >= 3 ? 1.5 : orderCount >= 2 ? 1 : 0.5
-    // 4. Zaman uyumu (2.5p) — deadline + pencere uyumu
+    // On-time hesapla
     const deliveries = optimized.filter(w => w.type === 'delivery')
     let onTimeMet = 0
-    let onTimeTotal = deliveries.length
+    const onTimeTotal = deliveries.length
     if (deliveries.length > 0) {
       deliveries.forEach(wp => {
         const order = orderGroup.find(o => o.id === wp.orderId)
         if (!order) return
         let ok = true
-        // Deadline kontrolu
         if (order.deadline && wp.arrivalTime > order.deadline) ok = false
-        // Pencere kontrolu — slotlu siparislerde pencere baslangicinden once teslimat yapilmamali
         if (order.deliveryWindow?.start && wp.arrivalTime < order.deliveryWindow.start) ok = false
         if (ok) onTimeMet++
       })
-      const timeRate = onTimeMet / deliveries.length
-      courierScore += timeRate >= 0.95 ? 2.5 : timeRate >= 0.8 ? 2 : timeRate >= 0.6 ? 1.5 : timeRate >= 0.4 ? 1 : 0.5
-    } else {
-      courierScore += 2
     }
     const onTimeRate = onTimeTotal > 0 ? Math.round(onTimeMet / onTimeTotal * 100) : 100
-    courierScore = Math.round(courierScore * 2) / 2
 
     // ─── ROTA FIYATI ───
     const routePrice = calculateRoutePrice(orderGroup, totalKm, totalTimeSec)
@@ -1660,7 +1675,6 @@ function simulateRoutes() {
       routePrice,
       onTimeRate,
       courierId: courier.id, color,
-      courierScore,
       algorithm: { assignment: assignAlgo, routing: routeAlgo, optimization: optAlgo },
     })
 
@@ -1669,7 +1683,7 @@ function simulateRoutes() {
   }
 
   // ─── STEP 4: ON-TIME ENFORCEMENT — %95 zamaninda teslimat garanti ───
-  // Rotalari agresif bol: toplam oran %95 olana kadar devam et
+  // Her rotayi bireysel olarak %95'e zorlayacak sekilde bol
   const MIN_ON_TIME_RATE = 95
 
   // Yardimci: bir rotanin on-time oranini hesapla
@@ -1690,7 +1704,15 @@ function simulateRoutes() {
 
   // Yardimci: siparis grubundan yeni rota olustur
   function buildNewRoute(orderGroup, rid) {
-    const wp = buildRouteWaypoints(orderGroup, routeAlgo, routeParams, algoSimBaseTime.value)
+    // Deadline sirasina gore sirala — en acil siparis once teslim edilsin
+    const sorted = [...orderGroup].sort((a, b) => {
+      if (a.mode === 'instant' && b.mode !== 'instant') return -1
+      if (b.mode === 'instant' && a.mode !== 'instant') return 1
+      const aD = a.deadline || Infinity
+      const bD = b.deadline || Infinity
+      return aD - bD
+    })
+    const wp = buildRouteWaypoints(sorted, routeAlgo, routeParams, algoSimBaseTime.value)
     const opt = optimizeWaypoints(wp, optAlgo, optParams)
     const km = computeRouteDistance(opt)
     const timeSec = opt.length > 0 ? Math.round((opt[opt.length-1].departureTime - algoSimBaseTime.value)/1000) : 0
@@ -1708,7 +1730,6 @@ function simulateRoutes() {
       onTimeRate: 0,
       courierId: couriers[routeIdx % couriers.length].id,
       color: ROUTE_COLORS[routeIdx % ROUTE_COLORS.length],
-      courierScore: 0,
       algorithm: { assignment: assignAlgo, routing: routeAlgo, optimization: optAlgo },
     }
     newRoute.onTimeRate = calcRouteOnTime(newRoute)
@@ -1718,34 +1739,34 @@ function simulateRoutes() {
   // Ilk hesaplama
   routes.forEach(r => { r.onTimeRate = calcRouteOnTime(r) })
 
-  for (let enforcementPass = 0; enforcementPass < 10; enforcementPass++) {
-    // Toplam on-time hesapla
-    let totalDel = 0, totalOk = 0
-    routes.forEach(r => {
-      const c = r.orderIds.length
-      totalDel += c
-      totalOk += Math.round(c * r.onTimeRate / 100)
-    })
-    const globalRate = totalDel > 0 ? (totalOk / totalDel * 100) : 100
-    if (globalRate >= MIN_ON_TIME_RATE) break
-
-    // En kotu rotayi bul (en dusuk on-time, 2+ siparis)
-    let worstIdx = -1, worstRate = 100
+  // Agresif enforcement: %95 altindaki HER rotayi bol (maks 30 pass)
+  for (let enforcementPass = 0; enforcementPass < 30; enforcementPass++) {
+    // %95 altinda ve bolunebilir (2+ siparis) rota bul
+    let worstIdx = -1, worstRate = MIN_ON_TIME_RATE
     routes.forEach((r, i) => {
       if (r.onTimeRate < worstRate && r.orderIds.length >= 2) {
-        worstRate = r.onTimeRate
-        worstIdx = i
+        if (worstIdx === -1 || r.onTimeRate < worstRate) {
+          worstRate = r.onTimeRate
+          worstIdx = i
+        }
       }
     })
-    if (worstIdx === -1) break // bolunecek rota kalmadi (hepsi tek siparis)
+    if (worstIdx === -1) break // bolunecek rota kalmadi
 
     const worstRoute = routes[worstIdx]
     const routeOrders = orders.filter(o => worstRoute.orderIds.includes(o.id))
 
-    // Rotayi ikiye bol: ilk yari ve ikinci yari
-    const half = Math.ceil(routeOrders.length / 2)
-    const group1 = routeOrders.slice(0, half)
-    const group2 = routeOrders.slice(half)
+    // Deadline sirasina gore sirala ve bol — gec kalanlar ayri rotaya
+    const sortedByDeadline = [...routeOrders].sort((a, b) => {
+      const aD = a.deadline || Infinity
+      const bD = b.deadline || Infinity
+      return aD - bD
+    })
+
+    // Acil siparisleri (deadline yakin) ayir, gerisini ikinci rotaya ver
+    const half = Math.ceil(sortedByDeadline.length / 2)
+    const group1 = sortedByDeadline.slice(0, half)
+    const group2 = sortedByDeadline.slice(half)
 
     // Mevcut rotayi group1 ile guncelle
     const rebuilt1 = buildNewRoute(group1, worstRoute.id)
@@ -1987,6 +2008,39 @@ function simulateRoutes() {
     reasons.push({ type: 'warning', text: `Kurye basina ortalama ${avgSipRota.toFixed(0)} siparis — yuksek yogunluk, daha fazla kurye eklenmesi dusunulebilir.` })
   }
 
+  // ─── ZAMANINDA TESLİMAT ANALİZİ ───
+  const lateRoutes = routes.filter(r => r.onTimeRate < 100)
+  if (lateRoutes.length > 0) {
+    reasons.push({ type: 'warning', text: `${lateRoutes.length}/${totalRoutes} rotada zamaninda teslimat orani %100'un altinda.` })
+    lateRoutes.sort((a, b) => a.onTimeRate - b.onTimeRate)
+    lateRoutes.forEach((r, li) => {
+      if (li >= 5) return // ilk 5 rotayi goster
+      const rIdx = routes.indexOf(r) + 1
+      const rOrders = orders.filter(o => r.orderIds.includes(o.id))
+      // Hangi siparisler gec kalacak
+      const lateOrders = []
+      const deliveries = r.waypoints.filter(w => w.type === 'delivery')
+      deliveries.forEach(wp => {
+        const order = rOrders.find(o => o.id === wp.orderId)
+        if (!order) return
+        if (order.deadline && wp.arrivalTime > order.deadline) {
+          const lateMin = Math.round((wp.arrivalTime - order.deadline) / 60000)
+          lateOrders.push(`${order.orderNumber || order.id.slice(-6)} (${lateMin}dk gec)`)
+        } else if (order.deliveryWindow?.start && wp.arrivalTime < order.deliveryWindow.start) {
+          const earlyMin = Math.round((order.deliveryWindow.start - wp.arrivalTime) / 60000)
+          lateOrders.push(`${order.orderNumber || order.id.slice(-6)} (pencere ${earlyMin}dk sonra basliyor)`)
+        }
+      })
+      const detail = lateOrders.length > 0 ? `: ${lateOrders.join(', ')}` : ''
+      reasons.push({ type: r.onTimeRate < 95 ? 'warning' : 'info', text: `Rota #${rIdx} — %${r.onTimeRate} zamaninda${detail}` })
+    })
+    if (lateRoutes.length > 5) {
+      reasons.push({ type: 'info', text: `...ve ${lateRoutes.length - 5} rota daha %100'un altinda.` })
+    }
+  } else if (totalRoutes > 0) {
+    reasons.push({ type: 'success', text: `Tum rotalar %100 zamaninda teslimat oranina sahip.` })
+  }
+
   // ─── VERİMLİLİK PUANI (10 üzerinden) ───
   // 5 kriter, her biri 2 puan
   let effScore = 0
@@ -2042,7 +2096,14 @@ function simulateRoutes() {
   algoSimSuggestions.value = []
   algoSimSuggestionsOpen.value = false
 
-  // ─── ALTERNATİF ALGORİTMA ÖNERİLERİ (arka planda) ───
+  // Otomatik optimizasyon sonrasi tekrar calisma — sonsuz dongu engelle
+  if (algoAutoOptimized.value) {
+    algoAutoOptimized.value = false
+    if (algoLeafletMap) drawAlgoMap(true)
+    return
+  }
+
+  // ─── ALTERNATİF ALGORİTMA ANALİZİ (arka planda) ───
   // Tek eksen degistirerek test et (90 combo yerine ~12 trial — UI donmaz)
   const assignOptions = ['hungarian', 'greedy_nearest', 'auction', 'zone_cascade', 'batch_dispatch', 'multi_objective']
   const routeOptions = ['clarke_wright', 'or_tools_vrp', 'vroom_solver']
@@ -2081,62 +2142,78 @@ function simulateRoutes() {
       } catch (_) { /* skip broken combos */ }
     }
 
-    // En iyi alternatifleri bul
-    const betterTrials = trials.filter(t => t.score > capturedEffScore).sort((a, b) => b.score - a.score || a.totalRoutes - b.totalRoutes)
-    const sameScoreBetter = trials.filter(t => t.score === capturedEffScore && (t.totalRoutes < capturedTotalRoutes || t.totalKm < capturedTotalKmAll))
-      .sort((a, b) => a.totalRoutes - b.totalRoutes || a.totalKm - b.totalKm)
-
-    const suggestions = []
     const algoName = (id) => getAlgoById(id)?.name || id
+    const allSorted = [...trials].sort((a, b) => b.score - a.score || a.totalRoutes - b.totalRoutes || a.totalKm - b.totalKm)
+    const best = allSorted[0]
 
-    const topBetter = betterTrials.slice(0, 3)
-    for (const t of topBetter) {
+    // En iyi alternatif mevcut secimden daha iyiyse otomatik uygula
+    if (best && (best.score > capturedEffScore || (best.score === capturedEffScore && (best.totalRoutes < capturedTotalRoutes || best.totalKm < capturedTotalKmAll)))) {
+      const bestCombo = { assignment: best.assignAlgo, routing: best.routeAlgo, optimization: best.optAlgo }
       const parts = []
-      if (t.assignAlgo !== capturedAssignAlgo) parts.push(`atama: ${algoName(t.assignAlgo)}`)
-      if (t.routeAlgo !== capturedRouteAlgo) parts.push(`rotalama: ${algoName(t.routeAlgo)}`)
-      if (t.optAlgo !== capturedOptAlgo) parts.push(`optimizasyon: ${algoName(t.optAlgo)}`)
-      const change = parts.join(', ')
-      const routeDiff = t.totalRoutes - capturedTotalRoutes
-      const routeText = routeDiff < 0 ? `${Math.abs(routeDiff)} daha az rota` : routeDiff > 0 ? `${routeDiff} daha fazla rota` : 'ayni rota sayisi'
-      suggestions.push({
-        type: 'better',
-        score: t.score,
-        totalRoutes: t.totalRoutes,
-        totalKm: t.totalKm.toFixed(1),
-        text: `${change} kullansaydiniz → ${t.totalRoutes} rota, puan ${t.score}/10 (${routeText})`,
-        combo: { assignment: t.assignAlgo, routing: t.routeAlgo, optimization: t.optAlgo },
-      })
-    }
+      if (best.assignAlgo !== capturedAssignAlgo) parts.push(`atama: ${algoName(best.assignAlgo)}`)
+      if (best.routeAlgo !== capturedRouteAlgo) parts.push(`rotalama: ${algoName(best.routeAlgo)}`)
+      if (best.optAlgo !== capturedOptAlgo) parts.push(`optimizasyon: ${algoName(best.optAlgo)}`)
 
-    if (sameScoreBetter.length > 0 && topBetter.length < 3) {
-      const t = sameScoreBetter[0]
-      const parts = []
-      if (t.assignAlgo !== capturedAssignAlgo) parts.push(`atama: ${algoName(t.assignAlgo)}`)
-      if (t.routeAlgo !== capturedRouteAlgo) parts.push(`rotalama: ${algoName(t.routeAlgo)}`)
-      if (t.optAlgo !== capturedOptAlgo) parts.push(`optimizasyon: ${algoName(t.optAlgo)}`)
-      const change = parts.join(', ')
-      const kmDiff = (capturedTotalKmAll - t.totalKm).toFixed(1)
-      suggestions.push({
-        type: 'equal',
-        score: t.score,
-        totalRoutes: t.totalRoutes,
-        totalKm: t.totalKm.toFixed(1),
-        text: `${change} ile ayni puan (${t.score}/10) ama ${t.totalRoutes < capturedTotalRoutes ? (capturedTotalRoutes - t.totalRoutes) + ' daha az rota' : kmDiff + ' km daha kisa'}`,
-        combo: { assignment: t.assignAlgo, routing: t.routeAlgo, optimization: t.optAlgo },
-      })
-    }
+      // Rotalama analizine neden bu secildi bilgisi ekle
+      const newReasons = [...algoSimReasons.value]
+      newReasons.push({ type: 'algo', text: `Otomatik optimizasyon: ${trials.length} alternatif test edildi → ${parts.join(', ')} secildi (${best.score}/10, ${best.totalRoutes} rota, ${best.totalKm.toFixed(1)} km)` })
 
-    if (suggestions.length === 0) {
-      suggestions.push({
-        type: 'optimal',
-        score: capturedEffScore,
-        text: `Mevcut kombinasyon (${capturedEffScore}/10) test edilen ${trials.length} alternatif arasinda en iyi sonucu veriyor.`,
-        combo: null,
-      })
-    }
+      // Elenenlerin nedenlerini yaz (en iyi 5 alternatif disindakileri goster)
+      const rejected = allSorted.slice(1)
+      const rejectionGroups = { scoreLow: [], moreRoutes: [], moreKm: [] }
+      for (const t of rejected) {
+        const tParts = []
+        if (t.assignAlgo !== best.assignAlgo) tParts.push(algoName(t.assignAlgo))
+        if (t.routeAlgo !== best.routeAlgo) tParts.push(algoName(t.routeAlgo))
+        if (t.optAlgo !== best.optAlgo) tParts.push(algoName(t.optAlgo))
+        const name = tParts.join(' + ') || 'ayni kombinasyon'
+        if (t.score < best.score) rejectionGroups.scoreLow.push({ name, score: t.score })
+        else if (t.totalRoutes > best.totalRoutes) rejectionGroups.moreRoutes.push({ name, routes: t.totalRoutes })
+        else if (t.totalKm > best.totalKm) rejectionGroups.moreKm.push({ name, km: t.totalKm.toFixed(1) })
+      }
+      if (rejectionGroups.scoreLow.length > 0) {
+        const names = rejectionGroups.scoreLow.slice(0, 3).map(r => `${r.name} (${r.score}/10)`)
+        newReasons.push({ type: 'info', text: `Elenen — dusuk puan: ${names.join(', ')}${rejectionGroups.scoreLow.length > 3 ? ` ve ${rejectionGroups.scoreLow.length - 3} diger` : ''}` })
+      }
+      if (rejectionGroups.moreRoutes.length > 0) {
+        const names = rejectionGroups.moreRoutes.slice(0, 3).map(r => `${r.name} (${r.routes} rota)`)
+        newReasons.push({ type: 'info', text: `Elenen — daha fazla rota: ${names.join(', ')}${rejectionGroups.moreRoutes.length > 3 ? ` ve ${rejectionGroups.moreRoutes.length - 3} diger` : ''}` })
+      }
+      if (rejectionGroups.moreKm.length > 0) {
+        const names = rejectionGroups.moreKm.slice(0, 3).map(r => `${r.name} (${r.km} km)`)
+        newReasons.push({ type: 'info', text: `Elenen — daha uzun mesafe: ${names.join(', ')}${rejectionGroups.moreKm.length > 3 ? ` ve ${rejectionGroups.moreKm.length - 3} diger` : ''}` })
+      }
 
-    algoSimSuggestions.value = suggestions
-    algoSimSuggestionsOpen.value = true
+      algoSimReasons.value = newReasons
+
+      // Otomatik uygula — flag ile tekrar trial calismasini engelle
+      algoAutoOptimized.value = true
+      applySuggestion(bestCombo)
+    } else {
+      // Mevcut secim zaten en iyi
+      const newReasons = [...algoSimReasons.value]
+      newReasons.push({ type: 'success', text: `Mevcut kombinasyon ${trials.length} alternatif arasinda en iyi — degisiklik gerekmiyor.` })
+
+      // Neden diger secenekler elendigini yaz
+      const rejected = allSorted.slice(0, 5)
+      for (const t of rejected) {
+        const tParts = []
+        if (t.assignAlgo !== capturedAssignAlgo) tParts.push(algoName(t.assignAlgo))
+        if (t.routeAlgo !== capturedRouteAlgo) tParts.push(algoName(t.routeAlgo))
+        if (t.optAlgo !== capturedOptAlgo) tParts.push(algoName(t.optAlgo))
+        const name = tParts.join(' + ') || 'benzer'
+        const reasons = []
+        if (t.score < capturedEffScore) reasons.push(`puan ${t.score}/10 < ${capturedEffScore}/10`)
+        if (t.totalRoutes > capturedTotalRoutes) reasons.push(`${t.totalRoutes - capturedTotalRoutes} fazla rota`)
+        if (t.totalKm > capturedTotalKmAll) reasons.push(`${(t.totalKm - capturedTotalKmAll).toFixed(1)} km fazla`)
+        if (t.score === capturedEffScore && t.totalRoutes === capturedTotalRoutes && t.totalKm >= capturedTotalKmAll) reasons.push('avantaj yok')
+        if (reasons.length > 0) {
+          newReasons.push({ type: 'info', text: `${name} elendi: ${reasons.join(', ')}` })
+        }
+      }
+
+      algoSimReasons.value = newReasons
+    }
   }, 50)
 
   if (algoLeafletMap) drawAlgoMap(true)
@@ -2501,12 +2578,25 @@ function optimizeWaypoints(waypoints, algo, params) {
     deliveries.splice(0, deliveries.length, ...best)
   }
 
-  // Recalculate times on optimized delivery sequence
+  // Recalculate times on optimized delivery sequence — gercek mesafe bazli
   let time = pickups.length > 0 ? pickups[pickups.length - 1].departureTime : Date.now()
   deliveries.forEach((wp, i) => {
-    time += 300000 + i * 120000
-    wp.arrivalTime = time
-    wp.departureTime = time + 60000
+    const prevLoc = i === 0
+      ? (pickups.length > 0 ? pickups[pickups.length - 1].location : { lat: 41.0, lng: 29.05 })
+      : deliveries[i - 1].location
+    const distKm = haversine(prevLoc.lat, prevLoc.lng, wp.location.lat, wp.location.lng)
+    const driveTimeMs = Math.max(180000, distKm / 25 * 3600000) // min 3dk, ort 25km/h
+    const serviceTimeMs = 120000 // 2dk teslimat
+    let arrivalTime = time + driveTimeMs
+
+    // Slotlu siparis: pencere henuz baslamadiysa bekle
+    if (wp.deliveryWindow?.start && arrivalTime < wp.deliveryWindow.start) {
+      arrivalTime = wp.deliveryWindow.start + Math.floor(Math.random() * 300000)
+    }
+
+    wp.arrivalTime = arrivalTime
+    wp.departureTime = arrivalTime + serviceTimeMs
+    time = wp.departureTime
   })
 
   return [...pickups, ...deliveries]
@@ -2878,6 +2968,375 @@ const pricingCalcResult = computed(() => {
   return { total: subtotal.toFixed(2), breakdown }
 })
 
+// Auction routes — bridge algo sim routes to pricing tab
+const auctionRoutes = computed(() => algoSimRoutes.value || [])
+
+function handleCalcPrice() {
+  // pricingCalcResult is already computed, this just serves as a visual trigger
+}
+
+function getRoutePriceBreakdown(route) {
+  const items = []
+  const orderCount = route.orderIds?.length || 1
+  const km = route.totalDistanceKm || 0
+  const p = pricingParams
+
+  const basePerOrder = p.baseFee || 0
+  items.push({ name: `Siparis Bazi (${orderCount} adet)`, label: `${(basePerOrder * orderCount).toFixed(0)} TL` })
+
+  const billableKm = Math.max(0, km - (p.perKmAfter || 0))
+  const kmCost = Math.min(billableKm * (p.perKmFee || 0), (p.maxKmFee || 999))
+  items.push({ name: `Km Ucreti (${km.toFixed(1)} km)`, label: `${kmCost.toFixed(0)} TL` })
+
+  if (route.totalTimeSec) {
+    const h = new Date().getHours()
+    if (h >= 22 || h < 6) {
+      items.push({ name: 'Gece Primi', label: `x${p.nightMultiplier}`, isMultiplier: true })
+    } else if ((h >= 11 && h < 14) || (h >= 18 && h < 21)) {
+      items.push({ name: 'Yogun Saat', label: `x${p.peakHourMultiplier}`, isMultiplier: true })
+    }
+  }
+
+  if (route.orderIds?.length >= 5) {
+    items.push({ name: 'Yogunluk Indirimi', label: `x${orderCount >= 8 ? '0.88' : '0.92'}`, isMultiplier: true })
+  }
+
+  return items
+}
+
+// Dispatch oncesi kurye eligibility kontrolu
+async function checkAllCouriersEligible(routes) {
+  const blockedCouriers = []
+  for (const route of routes) {
+    if (!route.courierId) continue
+    try {
+      const res = await checkCourierDispatchEligibility(route.courierId)
+      if (!res.ok || res.data?.eligible === false) {
+        blockedCouriers.push({
+          courierId: route.courierId,
+          name: route.courierName,
+          reason: res.data?.reason || 'Acik zimmet',
+        })
+      }
+    } catch (_) {} // Fail open — baglanti hatasi dispatch'i engellemesin
+  }
+  return blockedCouriers
+}
+
+// Commit dispatch results to real orders via API
+async function commitDispatchToRealOrders() {
+  const routes = algoSimRoutes.value
+  if (!routes || routes.length === 0) {
+    console.warn('[Dispatch] Kaydedilecek rota yok')
+    return { routeCount: 0, orderCount: 0, errors: [] }
+  }
+
+  // Kurye eligibility kontrolu
+  const blockedCouriers = await checkAllCouriersEligible(routes)
+  if (blockedCouriers.length > 0) {
+    const names = blockedCouriers.map(c => c.name || c.courierId).join(', ')
+    showAlgoToast(`${blockedCouriers.length} kurye bloklu: ${names}. Once zimmeti kapatin.`, 'error')
+    return { routeCount: 0, orderCount: 0, errors: [`Bloklu kuryeler: ${names}`] }
+  }
+
+  let savedRouteCount = 0
+  let updatedOrderCount = 0
+  const errors = []
+
+  // 1. Her rotayi Portal backend'e kaydet
+  for (const route of routes) {
+    try {
+      const res = await saveRoute({
+        id: route.id,
+        courierId: route.courierId || null,
+        courierName: route.courierName || null,
+        orderIds: route.orderIds || [],
+        totalDistanceKm: route.totalDistanceKm || 0,
+        totalTimeSec: route.totalTimeSec || 0,
+        estimatedEarning: route.estimatedEarning || 0,
+        routePrice: route.routePrice || 0,
+        color: route.color || '#6b7280',
+        waypoints: route.waypoints || [],
+        originIds: route.originIds || [],
+        status: 'active',
+        algorithms: algoSimStats.value?.algorithms || {},
+        createdAt: new Date().toISOString(),
+      })
+      if (res.ok) savedRouteCount++
+      else errors.push(`Rota ${route.id}: ${res.data?.error || 'kayit basarisiz'}`)
+    } catch (e) {
+      errors.push(`Rota ${route.id}: ${e.message}`)
+    }
+  }
+
+  // 2. Siparisleri toplu guncelle
+  const updates = []
+  for (const route of routes) {
+    for (const orderId of (route.orderIds || [])) {
+      updates.push({
+        id: orderId,
+        status: 'dispatched',
+        routeId: route.id,
+        courierId: route.courierId || null,
+      })
+    }
+  }
+
+  if (updates.length > 0) {
+    try {
+      const bulkRes = await bulkUpdateOrderStatus(updates)
+      if (bulkRes.ok) {
+        updatedOrderCount = updates.length
+      } else {
+        // Fallback: tek tek guncelle
+        const results = await Promise.allSettled(
+          updates.map(u => updateOrderStatus(u.id, {
+            status: u.status, routeId: u.routeId, courierId: u.courierId,
+          }))
+        )
+        updatedOrderCount = results.filter(r => r.status === 'fulfilled' && r.value?.ok).length
+        const failCount = updates.length - updatedOrderCount
+        if (failCount > 0) errors.push(`${failCount} siparis guncellenemedi`)
+      }
+    } catch (e) {
+      errors.push(`Toplu guncelleme hatasi: ${e.message}`)
+    }
+  }
+
+  if (errors.length > 0) {
+    console.warn('[Dispatch Commit] Hatalar:', errors)
+  }
+
+  // 3. OrderList.vue'ya bildir
+  window.dispatchEvent(new CustomEvent('bringo:dispatch-committed', {
+    detail: { routeCount: savedRouteCount, orderCount: updatedOrderCount, errors }
+  }))
+
+  return { routeCount: savedRouteCount, orderCount: updatedOrderCount, errors }
+}
+
+// ─── Copilot Eylem Motoru ─────────────────────────────────────────
+async function handleCopilotAction(action) {
+  const { type, params } = action
+
+  switch (type) {
+
+    // ── Rotayı ikiye böl ──────────────────────────────────────────
+    case 'split_route': {
+      const routeIdx = algoSimRoutes.value.findIndex(r => r.id === params.routeId)
+      if (routeIdx < 0) return { success: false, error: `Rota bulunamadı: ${params.routeId}` }
+
+      const route = algoSimRoutes.value[routeIdx]
+      if (route.isFrozen) return { success: false, error: 'Rota kilitli, bölemezsiniz' }
+
+      const routeOrders = algoSimOrders.value.filter(o => route.orderIds.includes(o.id))
+      if (routeOrders.length < 2) return { success: false, error: 'Bölmek için en az 2 sipariş gerekli' }
+
+      const half = Math.ceil(routeOrders.length / 2)
+      const group1 = routeOrders.slice(0, half)
+      const group2 = routeOrders.slice(half)
+
+      const newRoutes = [...algoSimRoutes.value]
+      newRoutes[routeIdx] = copilotRebuildRoute(group1, route.id, route.courierId, route.color)
+
+      const newRouteId = `route-sim-${Date.now()}`
+      const availCouriers = algoSimCouriers.value
+      const newCourier = availCouriers.find(c => !newRoutes.some(r => r.courierId === c.id)) || availCouriers[routeIdx % availCouriers.length]
+      const ROUTE_COLORS_LIST = ['#6366f1','#f59e0b','#10b981','#ef4444','#8b5cf6','#06b6d4','#f97316','#14b8a6','#ec4899','#84cc16']
+      const newColor = ROUTE_COLORS_LIST[(newRoutes.length) % ROUTE_COLORS_LIST.length]
+      newRoutes.push(copilotRebuildRoute(group2, newRouteId, newCourier?.id || route.courierId, newColor))
+
+      algoSimRoutes.value = newRoutes
+
+      algoSimOrders.value = algoSimOrders.value.map(o => {
+        if (group2.find(g => g.id === o.id)) return { ...o, routeId: newRouteId }
+        return o
+      })
+
+      showAlgoToast(`Rota bölündü: ${group1.length} + ${group2.length} sipariş`, 'success')
+      return { success: true }
+    }
+
+    // ── İki rotayı birleştir ──────────────────────────────────────
+    case 'merge_routes': {
+      const idx1 = algoSimRoutes.value.findIndex(r => r.id === params.routeId1)
+      const idx2 = algoSimRoutes.value.findIndex(r => r.id === params.routeId2)
+      if (idx1 < 0 || idx2 < 0) return { success: false, error: 'Bir veya iki rota bulunamadı' }
+
+      const route1 = algoSimRoutes.value[idx1]
+      const route2 = algoSimRoutes.value[idx2]
+      if (route1.isFrozen || route2.isFrozen) return { success: false, error: 'Kilitli rota birleştirilemez' }
+
+      const combined = algoSimOrders.value.filter(o =>
+        route1.orderIds.includes(o.id) || route2.orderIds.includes(o.id)
+      )
+
+      const mergedRoute = copilotRebuildRoute(combined, route1.id, route1.courierId, route1.color)
+      const newRoutes = algoSimRoutes.value.filter((_, i) => i !== idx1 && i !== idx2)
+      newRoutes.splice(Math.min(idx1, idx2), 0, mergedRoute)
+
+      algoSimRoutes.value = newRoutes
+      algoSimOrders.value = algoSimOrders.value.map(o =>
+        route2.orderIds.includes(o.id) ? { ...o, routeId: route1.id } : o
+      )
+
+      showAlgoToast(`${combined.length} siparişlik tek rota oluşturuldu`, 'success')
+      return { success: true }
+    }
+
+    // ── Siparişi başka rotaya taşı ────────────────────────────────
+    case 'move_order': {
+      const { orderId, fromRouteId, toRouteId } = params
+      const fromIdx = algoSimRoutes.value.findIndex(r => r.id === fromRouteId)
+      const toIdx = algoSimRoutes.value.findIndex(r => r.id === toRouteId)
+      if (fromIdx < 0 || toIdx < 0) return { success: false, error: 'Kaynak veya hedef rota bulunamadı' }
+
+      const fromRoute = algoSimRoutes.value[fromIdx]
+      const toRoute = algoSimRoutes.value[toIdx]
+      if (fromRoute.isFrozen || toRoute.isFrozen) return { success: false, error: 'Kilitli rotada taşıma yapılamaz' }
+      if (!fromRoute.orderIds.includes(orderId)) return { success: false, error: 'Sipariş kaynak rotada değil' }
+      if (fromRoute.orderIds.length <= 1) return { success: false, error: 'Tek siparişli rota bırakılamaz' }
+
+      const fromOrders = algoSimOrders.value.filter(o => fromRoute.orderIds.filter(id => id !== orderId).includes(o.id))
+      const toOrders = algoSimOrders.value.filter(o => [...toRoute.orderIds, orderId].includes(o.id))
+
+      const newRoutes = [...algoSimRoutes.value]
+      newRoutes[fromIdx] = copilotRebuildRoute(fromOrders, fromRoute.id, fromRoute.courierId, fromRoute.color)
+      newRoutes[toIdx] = copilotRebuildRoute(toOrders, toRoute.id, toRoute.courierId, toRoute.color)
+      algoSimRoutes.value = newRoutes
+
+      algoSimOrders.value = algoSimOrders.value.map(o =>
+        o.id === orderId ? { ...o, routeId: toRouteId } : o
+      )
+
+      showAlgoToast(`Sipariş taşındı`, 'success')
+      return { success: true }
+    }
+
+    // ── Kurye değiştir ────────────────────────────────────────────
+    case 'reassign_courier': {
+      const { routeId, newCourierId } = params
+      const routeIdx = algoSimRoutes.value.findIndex(r => r.id === routeId)
+      if (routeIdx < 0) return { success: false, error: 'Rota bulunamadı' }
+
+      const route = algoSimRoutes.value[routeIdx]
+      if (route.isFrozen) return { success: false, error: 'Kilitli rota değiştirilemez' }
+
+      const courier = algoSimCouriers.value.find(c => c.id === newCourierId)
+      if (!courier) return { success: false, error: 'Kurye bulunamadı' }
+
+      const newRoutes = [...algoSimRoutes.value]
+      newRoutes[routeIdx] = { ...route, courierId: newCourierId }
+      algoSimRoutes.value = newRoutes
+
+      showAlgoToast(`Rota ${courier.name || newCourierId} kuryesine atandı`, 'success')
+      return { success: true }
+    }
+
+    // ── Durak sırasını optimize et ────────────────────────────────
+    case 'reorder_waypoints': {
+      const routeIdx = algoSimRoutes.value.findIndex(r => r.id === params.routeId)
+      if (routeIdx < 0) return { success: false, error: 'Rota bulunamadı' }
+
+      const route = algoSimRoutes.value[routeIdx]
+      if (route.isFrozen) return { success: false, error: 'Kilitli rota değiştirilemez' }
+
+      const orders = algoSimOrders.value.filter(o => route.orderIds.includes(o.id))
+      const newRoutes = [...algoSimRoutes.value]
+      newRoutes[routeIdx] = copilotRebuildRoute(copilotSortByNearest(orders), route.id, route.courierId, route.color)
+      algoSimRoutes.value = newRoutes
+
+      showAlgoToast('Durak sırası optimize edildi', 'success')
+      return { success: true }
+    }
+
+    // ── Rotayı kilitle / kilidi aç ────────────────────────────────
+    case 'freeze_route': {
+      const routeIdx = algoSimRoutes.value.findIndex(r => r.id === params.routeId)
+      if (routeIdx < 0) return { success: false, error: 'Rota bulunamadı' }
+
+      const newRoutes = [...algoSimRoutes.value]
+      newRoutes[routeIdx] = { ...newRoutes[routeIdx], isFrozen: params.frozen !== false }
+      algoSimRoutes.value = newRoutes
+
+      const frozen = params.frozen !== false
+      showAlgoToast(`Rota ${frozen ? 'kilitlendi' : 'kilidi açıldı'}`, 'success')
+      return { success: true }
+    }
+
+    // ── Rota açıklaması (sadece text döner, eylem yok) ────────────
+    case 'explain_route': {
+      return { success: true }
+    }
+
+    default:
+      return { success: false, error: `Bilinmeyen eylem: ${type}` }
+  }
+}
+
+// ─── Yardımcı: rota yeniden hesapla (copilot için) ──────────────
+function copilotRebuildRoute(orders, routeId, courierId, color) {
+  if (!orders || orders.length === 0) return null
+
+  const totalKm = orders.reduce((sum, o, i) => {
+    if (i === 0) return sum
+    const prev = orders[i - 1]
+    const dlat = (o.deliveryLocation?.lat || 41) - (prev.deliveryLocation?.lat || 41)
+    const dlng = (o.deliveryLocation?.lng || 29) - (prev.deliveryLocation?.lng || 29)
+    return sum + Math.sqrt(dlat * dlat + dlng * dlng) * 111
+  }, 0) + 2
+
+  const timeSec = Math.round(totalKm * 3 * 60)
+  const totalDeci = orders.reduce((s, o) => s + (o.deci || 0), 0)
+
+  return {
+    id: routeId,
+    status: 'assigned',
+    courierId,
+    color,
+    orderIds: orders.map(o => o.id),
+    originIds: [...new Set(orders.map(o => o.originId))],
+    waypoints: orders.map(o => ({
+      type: 'delivery',
+      orderId: o.id,
+      lat: o.deliveryLocation?.lat,
+      lng: o.deliveryLocation?.lng,
+    })),
+    totalDistanceKm: parseFloat(totalKm.toFixed(2)),
+    totalTimeSec: timeSec,
+    totalDeci,
+    kmPerOrder: parseFloat((totalKm / orders.length).toFixed(2)),
+    estimatedEarning: orders.length * 28 + totalKm * 2,
+    routePrice: orders.length * 25 + totalKm * 1.5,
+    density: orders.length / Math.max(1, totalKm),
+    avgAddedKmPerOrder: totalKm / orders.length * 0.4,
+    onTimeRate: totalKm < 20 ? 95 : totalKm < 35 ? 85 : 70,
+    isFrozen: false,
+    algorithm: algoSimRoutes.value[0]?.algorithm || {},
+  }
+}
+
+// ─── Yardımcı: nearest-neighbor sıralama (copilot için) ─────────
+function copilotSortByNearest(orders) {
+  if (orders.length <= 2) return orders
+  const sorted = [orders[0]]
+  const remaining = [...orders.slice(1)]
+  while (remaining.length > 0) {
+    const last = sorted[sorted.length - 1]
+    let nearestIdx = 0
+    let minDist = Infinity
+    remaining.forEach((o, i) => {
+      const dlat = (o.deliveryLocation?.lat || 41) - (last.deliveryLocation?.lat || 41)
+      const dlng = (o.deliveryLocation?.lng || 29) - (last.deliveryLocation?.lng || 29)
+      const d = dlat * dlat + dlng * dlng
+      if (d < minDist) { minDist = d; nearestIdx = i }
+    })
+    sorted.push(remaining[nearestIdx])
+    remaining.splice(nearestIdx, 1)
+  }
+  return sorted
+}
+
 // Surge zone mini-map
 const surgeMapContainerRef = ref(null)
 let surgeLeafletMap = null
@@ -3018,9 +3477,16 @@ watch(activeTab, (tab) => {
   }
 }, { immediate: true })
 
+function handleMapEsc(e) {
+  if (e.key === 'Escape' && activeTab.value === 'map') {
+    router.push('/dashboard')
+  }
+}
+
 onMounted(() => {
   loadDashboardData()
   refreshInterval = setInterval(loadDashboardData, 30000)
+  window.addEventListener('keydown', handleMapEsc)
   // Init maps for non-overview tabs (they don't wait for loading)
   if (activeTab.value !== 'overview') {
     algoMapInitRetries = 0
@@ -3105,6 +3571,7 @@ onUnmounted(() => {
   if (refreshInterval) clearInterval(refreshInterval)
   if (sseConnection) sseConnection.close()
   if (algoSimCountdownTimer) clearInterval(algoSimCountdownTimer)
+  window.removeEventListener('keydown', handleMapEsc)
   destroyMap()
   destroyAlgoMap()
   if (surgeLeafletMap) { surgeLeafletMap.remove(); surgeLeafletMap = null }
@@ -3193,14 +3660,14 @@ const hourlyChartOptions = {
     </div>
   </div>
   <div v-else>
-    <!-- Header -->
-    <div class="flex items-center justify-between mb-4">
+    <!-- Header — harita tabinda gizle -->
+    <div v-if="activeTab !== 'map'" class="flex items-center justify-between mb-4">
       <div>
         <h1 class="text-2xl font-bold text-slate-800 dark:text-white">
-          {{ activeTab === 'overview' ? 'Dashboard' : activeTab === 'map' ? 'Canli Harita' : activeTab === 'pricing' ? 'Fiyatlama' : 'Algoritma' }}
+          {{ activeTab === 'overview' ? 'Dashboard' : activeTab === 'pricing' ? 'Fiyatlama' : 'Algoritma' }}
         </h1>
         <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          {{ activeTab === 'overview' ? 'Genel bakis ve anlik metrikler' : activeTab === 'map' ? 'Kurye ve siparis takip haritasi' : activeTab === 'pricing' ? 'Fiyat kurallari ve surge yonetimi' : 'Rotalama, dispatch ve optimizasyon' }}
+          {{ activeTab === 'overview' ? 'Genel bakis ve anlik metrikler' : activeTab === 'pricing' ? 'Fiyat kurallari ve surge yonetimi' : 'Rotalama, dispatch ve optimizasyon' }}
         </p>
       </div>
       <div v-if="activeTab === 'overview'" class="flex items-center gap-3">
@@ -3358,7 +3825,7 @@ const hourlyChartOptions = {
     </div>
 
     <!-- ==================== HARITA TAB ==================== -->
-    <div v-else-if="activeTab === 'map'" class="flex flex-col h-[calc(100vh-220px)] bg-gray-50 overflow-hidden rounded-xl border border-slate-200">
+    <div v-else-if="activeTab === 'map'" class="flex flex-col bg-gray-50 overflow-hidden" style="height: 100vh;">
       <!-- Stats Bar -->
       <div class="flex items-center gap-4 px-4 py-2 bg-white border-b border-slate-200 text-xs font-medium">
         <span class="flex items-center gap-1.5">
@@ -3373,6 +3840,13 @@ const hourlyChartOptions = {
         <span class="text-slate-600">Bos Kurye: <strong class="text-slate-900">{{ mapStatusCounts.online }}</strong></span>
         <span class="text-slate-400">|</span>
         <span class="text-slate-600">Dagitimda: <strong class="text-blue-600">{{ mapStatusCounts.delivering }}</strong></span>
+        <span class="ml-auto flex items-center gap-2">
+          <span class="text-slate-400">ESC ile cik</span>
+          <button @click="router.push('/dashboard')"
+            class="flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg cursor-pointer text-[11px] transition-colors">
+            <Minimize2 :size="12" /> Kucult
+          </button>
+        </span>
       </div>
 
       <div class="flex flex-1 overflow-hidden">
@@ -3629,353 +4103,235 @@ const hourlyChartOptions = {
       </div>
     </div>
     <!-- ==================== FIYATLAMA TAB ==================== -->
-    <div v-else-if="activeTab === 'pricing'">
-      <!-- Top Row: Surge + Mini Map -->
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <!-- Surge Status -->
-        <div>
-          <div :class="['rounded-xl border p-5 mb-4', surgeData.active ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800' : 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800']">
-            <div class="flex items-center justify-between">
-              <div class="flex items-center gap-3">
-                <div :class="['w-10 h-10 rounded-lg flex items-center justify-center', surgeData.active ? 'bg-red-100 dark:bg-red-900/40' : 'bg-green-100 dark:bg-green-900/40']">
-                  <TrendingUp :size="20" :class="surgeData.active ? 'text-red-600' : 'text-green-600'" />
-                </div>
-                <div>
-                  <h3 class="font-semibold text-slate-800 dark:text-white">{{ surgeData.active ? 'Surge Fiyatlama Aktif' : 'Normal Fiyatlama' }}</h3>
-                  <p class="text-sm text-slate-500 dark:text-slate-400">{{ surgeData.active ? surgeData.reason : 'Talep normal seviyede' }}</p>
-                </div>
-              </div>
-              <div v-if="surgeData.active" class="text-right">
-                <p class="text-2xl font-bold text-red-600">x{{ surgeData.multiplier }}</p>
-                <p class="text-xs text-slate-500">Genel Carpan</p>
-              </div>
-            </div>
-          </div>
+    <div v-else-if="activeTab === 'pricing'" class="space-y-6">
 
-          <!-- Zone Table -->
-          <div v-if="surgeData.zones?.length" class="bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-700 overflow-hidden">
-            <div class="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex items-center gap-2">
-              <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-              <h3 class="font-semibold text-slate-800 dark:text-white text-sm">Bolge Bazli Surge</h3>
-            </div>
-            <table class="w-full text-sm">
-              <thead>
-                <tr class="bg-slate-50 dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700">
-                  <th class="text-left px-4 py-2.5 font-medium text-slate-600 dark:text-slate-400 text-xs">#</th>
-                  <th class="text-left px-4 py-2.5 font-medium text-slate-600 dark:text-slate-400 text-xs">Bolge</th>
-                  <th class="text-center px-4 py-2.5 font-medium text-slate-600 dark:text-slate-400 text-xs">Siparis</th>
-                  <th class="text-center px-4 py-2.5 font-medium text-slate-600 dark:text-slate-400 text-xs">Carpan</th>
-                  <th class="text-center px-4 py-2.5 font-medium text-slate-600 dark:text-slate-400 text-xs">Durum</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(zone, zi) in surgeData.zones" :key="zone.name" class="border-b border-slate-50 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
-                  <td class="px-4 py-2.5 text-xs text-slate-400">{{ zi+1 }}</td>
-                  <td class="px-4 py-2.5 font-medium text-slate-700 dark:text-slate-300 text-xs">{{ zone.name }}</td>
-                  <td class="px-4 py-2.5 text-center text-slate-600 dark:text-slate-400 text-xs">{{ zone.orderCount }}</td>
-                  <td class="px-4 py-2.5 text-center">
-                    <span :class="['px-2 py-0.5 rounded-full text-xs font-bold', zone.multiplier >= 1.5 ? 'bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400' : zone.multiplier >= 1.2 ? 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400' : 'bg-green-50 text-green-600 dark:bg-green-950/40 dark:text-green-400']">
-                      x{{ zone.multiplier }}
-                    </span>
-                  </td>
-                  <td class="px-4 py-2.5 text-center">
-                    <span :class="['w-2 h-2 rounded-full inline-block', zone.multiplier > 1.0 ? 'bg-red-500 animate-pulse' : 'bg-green-500']" />
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+      <!-- Surge Status (compact, full width) -->
+      <div :class="['rounded-xl border p-4 flex items-center justify-between',
+        surgeData.active
+          ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800'
+          : 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800']">
+        <div class="flex items-center gap-3">
+          <div :class="['w-9 h-9 rounded-lg flex items-center justify-center',
+            surgeData.active ? 'bg-red-100 dark:bg-red-900/40' : 'bg-green-100 dark:bg-green-900/40']">
+            <TrendingUp :size="18" :class="surgeData.active ? 'text-red-600' : 'text-green-600'" />
+          </div>
+          <div>
+            <h3 class="font-semibold text-slate-800 dark:text-white text-sm">
+              {{ surgeData.active ? 'Surge Fiyatlama Aktif' : 'Normal Fiyatlama' }}
+            </h3>
+            <p class="text-xs text-slate-500">{{ surgeData.active ? surgeData.reason : 'Talep normal seviyede' }}</p>
           </div>
         </div>
-
-        <!-- Surge Mini Map -->
-        <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-700 overflow-hidden">
-          <div class="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
-            <h3 class="font-semibold text-slate-800 dark:text-white text-sm">Surge Bolgesi Haritasi</h3>
-            <p class="text-xs text-slate-500 mt-0.5">Renk: yesil &lt;1.2 | amber &lt;1.5 | kirmizi ≥1.5</p>
+        <div class="flex items-center gap-6">
+          <div v-if="surgeData.zones?.length" class="hidden md:flex items-center gap-3">
+            <div v-for="zone in surgeData.zones.slice(0,4)" :key="zone.name" class="text-center">
+              <p class="text-[10px] text-slate-400">{{ zone.name }}</p>
+              <span :class="['text-xs font-bold',
+                zone.multiplier >= 1.5 ? 'text-red-600' : zone.multiplier >= 1.2 ? 'text-amber-600' : 'text-green-600']">
+                x{{ zone.multiplier }}
+              </span>
+            </div>
           </div>
-          <div ref="surgeMapContainerRef" style="height: 240px; width: 100%;" />
+          <div v-if="surgeData.active" class="text-right">
+            <p class="text-2xl font-bold text-red-600">x{{ surgeData.multiplier }}</p>
+            <p class="text-[10px] text-slate-500">Genel Carpan</p>
+          </div>
         </div>
       </div>
 
-      <!-- Fiyat Parametreleri -->
-      <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-700 p-5 mb-6">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
-            <Sliders :size="16" class="text-indigo-500" /> Fiyat Parametreleri
-          </h3>
-          <button @click="savePricingParams" :disabled="pricingParamsSaving" class="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors cursor-pointer disabled:opacity-50">
-            <RefreshCw v-if="pricingParamsSaving" :size="13" class="animate-spin" />
-            <CheckCircle v-else :size="13" />
-            Kaydet
-          </button>
-        </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-          <!-- Temel -->
-          <div class="space-y-3">
-            <h4 class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-1.5">Temel Ucretler</h4>
-            <div>
-              <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Siparis Basi Ucret (TL)</label>
-              <input v-model.number="pricingParams.baseFee" type="number" step="0.5" class="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
+      <!-- Parametreler + Hesaplayici yan yana -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        <!-- SOL: Fiyat Parametreleri -->
+        <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-700 p-5">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-semibold text-slate-800 dark:text-white flex items-center gap-2 text-sm">
+              <Sliders :size="15" class="text-indigo-500" /> Fiyat Parametreleri
+            </h3>
+            <button @click="savePricingParams" :disabled="pricingParamsSaving"
+              class="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-medium transition-colors cursor-pointer disabled:opacity-50">
+              <RefreshCw v-if="pricingParamsSaving" :size="12" class="animate-spin" />
+              <CheckCircle v-else :size="12" />
+              Kaydet
+            </button>
+          </div>
+
+          <!-- 2 Kolon: Temel + Zone -->
+          <div class="grid grid-cols-2 gap-5 mb-5">
+            <div class="space-y-3">
+              <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Temel Ucretler</h4>
+              <div>
+                <label class="block text-xs text-slate-500 mb-1">Siparis Basi (TL)</label>
+                <input v-model.number="pricingParams.baseFee" type="number" step="0.5"
+                  class="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
+              </div>
+              <div>
+                <label class="block text-xs text-slate-500 mb-1">Km Basi (TL/km)</label>
+                <input v-model.number="pricingParams.perKmFee" type="number" step="0.1"
+                  class="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
+              </div>
+              <div>
+                <label class="block text-xs text-slate-500 mb-1">Ucretsiz Km Siniri</label>
+                <input v-model.number="pricingParams.perKmAfter" type="number" step="0.5"
+                  class="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
+              </div>
             </div>
-            <div>
-              <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Km Basi Ucret (TL/km)</label>
-              <input v-model.number="pricingParams.perKmFee" type="number" step="0.1" class="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
-            </div>
-            <div>
-              <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Ucretsiz Km Siniri</label>
-              <input v-model.number="pricingParams.perKmAfter" type="number" step="0.5" class="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
-            </div>
-            <div>
-              <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Maks. Km Ucreti (TL)</label>
-              <input v-model.number="pricingParams.maxKmFee" type="number" step="1" class="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
+            <div class="space-y-3">
+              <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Zone Carpanlari</h4>
+              <div v-for="z in ['A','B','C','D']" :key="z">
+                <label class="block text-xs text-slate-500 mb-1">
+                  Zone {{ z }}
+                  <span class="text-[10px] text-slate-400">{{ z==='A'?'Merkez':z==='B'?'Yakin':z==='C'?'Uzak':'Dis' }}</span>
+                </label>
+                <input v-model.number="pricingParams.zoneMultipliers[z]" type="number" step="0.05" min="1" max="5"
+                  class="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
+              </div>
             </div>
           </div>
 
-          <!-- Zone -->
-          <div class="space-y-3">
-            <h4 class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-1.5">Zone Carpanlari</h4>
-            <div v-for="z in ['A','B','C','D']" :key="z">
-              <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">
-                Zone {{ z }}
-                <span class="ml-1 text-[10px]">{{ z==='A'?'(Merkez)':z==='B'?'(Yakin)':z==='C'?'(Uzak)':'(Dis)' }}</span>
-              </label>
-              <input v-model.number="pricingParams.zoneMultipliers[z]" type="number" step="0.05" min="1" max="5"
-                class="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
-            </div>
-          </div>
-
-          <!-- Zaman -->
-          <div class="space-y-3">
-            <h4 class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-1.5">Zaman Primleri</h4>
-            <div>
-              <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Yogun Saat (11-14 / 18-21)</label>
-              <input v-model.number="pricingParams.peakHourMultiplier" type="number" step="0.05" min="1" max="3"
-                class="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
-            </div>
-            <div>
-              <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Gece Primi (22-06)</label>
-              <input v-model.number="pricingParams.nightMultiplier" type="number" step="0.05" min="1" max="3"
-                class="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
-            </div>
-            <div>
-              <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Hafta Sonu Primi</label>
-              <input v-model.number="pricingParams.weekendMultiplier" type="number" step="0.05" min="1" max="3"
-                class="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
-            </div>
-          </div>
-
-          <!-- Ek Parametreler -->
-          <div class="space-y-3">
-            <h4 class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-1.5">Ek Parametreler</h4>
-            <div>
-              <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Agir Paket Ucreti (TL)</label>
-              <input v-model.number="pricingParams.heavyPackageFee" type="number" step="0.5"
-                class="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
-            </div>
-            <div>
-              <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Agir Paket Esigi (kg)</label>
-              <input v-model.number="pricingParams.heavyThreshold" type="number" step="1"
-                class="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
-            </div>
-            <div>
-              <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Soguk Zincir Ucreti (TL)</label>
-              <input v-model.number="pricingParams.frozenFee" type="number" step="0.5"
-                class="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
-            </div>
-            <div>
-              <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Express Carpan (eski)</label>
-              <input v-model.number="pricingParams.expressMultiplier" type="number" step="0.05" min="1" max="5"
-                class="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
-            </div>
-          </div>
-        </div>
-
-        <!-- Mod Bazli Fiyatlandirma + Servis Segmentleri + Proje Bazli -->
-        <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <!-- Mod Bazli Siparis Basi Ucret -->
-            <div>
-              <h4 class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                <Zap :size="12" class="text-amber-500" /> Mod Bazli Siparis Ucreti
-              </h4>
-              <div class="space-y-2">
-                <div class="flex items-center gap-2">
-                  <span class="w-2 h-2 rounded-full bg-red-500 flex-shrink-0"></span>
-                  <label class="text-xs text-slate-500 dark:text-slate-400 w-16">Express</label>
+          <!-- Mod bazli fiyat -->
+          <div class="border-t border-slate-100 dark:border-slate-700 pt-4 mb-4">
+            <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Mod Bazli Siparis Ucreti</h4>
+            <div class="grid grid-cols-3 gap-2">
+              <div>
+                <label class="block text-[10px] text-slate-500 mb-1">Express</label>
+                <div class="flex items-center gap-1">
                   <input v-model.number="pricingParams.modeFees.instant" type="number" step="1"
-                    class="flex-1 px-3 py-1.5 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20" />
+                    class="flex-1 px-2 py-1.5 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
                   <span class="text-[10px] text-slate-400">TL</span>
                 </div>
-                <div class="flex items-center gap-2">
-                  <span class="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0"></span>
-                  <label class="text-xs text-slate-500 dark:text-slate-400 w-16">Slotlu</label>
+              </div>
+              <div>
+                <label class="block text-[10px] text-slate-500 mb-1">Slotlu</label>
+                <div class="flex items-center gap-1">
                   <input v-model.number="pricingParams.modeFees.standard" type="number" step="1"
-                    class="flex-1 px-3 py-1.5 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+                    class="flex-1 px-2 py-1.5 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
                   <span class="text-[10px] text-slate-400">TL</span>
                 </div>
-                <div class="flex items-center gap-2">
-                  <span class="w-2 h-2 rounded-full bg-green-500 flex-shrink-0"></span>
-                  <label class="text-xs text-slate-500 dark:text-slate-400 w-16">Flex</label>
+              </div>
+              <div>
+                <label class="block text-[10px] text-slate-500 mb-1">Flex</label>
+                <div class="flex items-center gap-1">
                   <input v-model.number="pricingParams.modeFees.flex" type="number" step="1"
-                    class="flex-1 px-3 py-1.5 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500/20" />
-                  <span class="text-[10px] text-slate-400">TL</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Servis Segmentleri (Uber-style Tiers) -->
-            <div>
-              <h4 class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                <Star :size="12" class="text-violet-500" /> Servis Segmentleri
-              </h4>
-              <div class="space-y-2">
-                <div v-for="(tier, key) in pricingParams.serviceTiers" :key="key"
-                  class="p-2 rounded-lg border text-[11px]"
-                  :class="key === 'vip' ? 'border-amber-300 bg-amber-50/50 dark:border-amber-700 dark:bg-amber-950/20'
-                    : key === 'premium' ? 'border-violet-200 bg-violet-50/50 dark:border-violet-700 dark:bg-violet-950/20'
-                    : 'border-slate-200 bg-slate-50/50 dark:border-slate-600 dark:bg-slate-800/50'">
-                  <div class="flex items-center justify-between mb-1">
-                    <span class="font-bold" :class="key === 'vip' ? 'text-amber-700 dark:text-amber-400' : key === 'premium' ? 'text-violet-700 dark:text-violet-400' : 'text-slate-700 dark:text-slate-300'">
-                      {{ tier.label }}
-                    </span>
-                    <span class="text-[10px] text-slate-400">min kurye: {{ tier.courierMinScore }}/10</span>
-                  </div>
-                  <div class="text-[10px] text-slate-500 mb-1.5">{{ tier.description }}</div>
-                  <div class="flex items-center gap-2">
-                    <label class="text-[10px] text-slate-400 w-14">Carpan:</label>
-                    <input v-model.number="tier.multiplier" type="number" step="0.1" min="1" max="5"
-                      class="flex-1 px-2 py-1 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white rounded text-xs focus:outline-none focus:ring-2 focus:ring-violet-500/20" />
-                    <span class="text-[10px] text-slate-400 font-bold">x{{ tier.multiplier }}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Proje Bazli Ek Ucretler -->
-            <div>
-              <h4 class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                <Layers :size="12" class="text-indigo-500" /> Proje Bazli Ek Ucret
-              </h4>
-              <div class="space-y-1.5 max-h-[220px] overflow-y-auto">
-                <div v-for="proj in PROJECTS.filter(p => p !== 'Tumu')" :key="proj"
-                  class="flex items-center gap-2">
-                  <label class="text-[11px] text-slate-600 dark:text-slate-400 flex-1 truncate" :title="proj">{{ proj }}</label>
-                  <input v-model.number="pricingParams.projectSurcharges[proj]" type="number" step="1" min="0"
-                    class="w-16 px-2 py-1 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded text-xs text-center focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
+                    class="flex-1 px-2 py-1.5 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
                   <span class="text-[10px] text-slate-400">TL</span>
                 </div>
               </div>
             </div>
           </div>
+
+          <!-- Zaman / Surge toggle -->
+          <div class="border-t border-slate-100 dark:border-slate-700 pt-4">
+            <button @click="showTimingParams = !showTimingParams"
+              class="flex items-center gap-2 text-xs text-slate-500 hover:text-slate-700 cursor-pointer mb-2">
+              <ChevronDown :size="14" :class="showTimingParams ? 'rotate-180' : ''" class="transition-transform" />
+              Zaman & Surge Parametreleri
+            </button>
+            <div v-if="showTimingParams" class="grid grid-cols-2 gap-3 mt-3">
+              <div>
+                <label class="block text-xs text-slate-500 mb-1">Yogun Saat Carpani</label>
+                <input v-model.number="pricingParams.peakHourMultiplier" type="number" step="0.05" min="1" max="3"
+                  class="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none" />
+              </div>
+              <div>
+                <label class="block text-xs text-slate-500 mb-1">Gece Primi (22-06)</label>
+                <input v-model.number="pricingParams.nightMultiplier" type="number" step="0.05" min="1" max="3"
+                  class="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none" />
+              </div>
+              <div>
+                <label class="block text-xs text-slate-500 mb-1">Surge Esigi (siparis)</label>
+                <input v-model.number="pricingParams.surgeThreshold" type="number" step="1"
+                  class="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none" />
+              </div>
+              <div>
+                <label class="block text-xs text-slate-500 mb-1">Maks. Surge Carpani</label>
+                <input v-model.number="pricingParams.surgeMax" type="number" step="0.1" min="1"
+                  class="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none" />
+              </div>
+              <div class="col-span-2 flex items-center gap-3">
+                <label class="text-sm font-medium text-slate-700 dark:text-slate-300">Surge Aktif</label>
+                <button @click="pricingParams.surgeEnabled = !pricingParams.surgeEnabled"
+                  :class="['w-10 h-6 rounded-full transition-colors flex items-center cursor-pointer',
+                    pricingParams.surgeEnabled ? 'bg-red-500 justify-end' : 'bg-slate-300 dark:bg-slate-600 justify-start']">
+                  <span class="block w-4 h-4 bg-white rounded-full shadow-sm mx-1" />
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <!-- Surge Params Row -->
-        <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
-          <h4 class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">Surge Parametreleri</h4>
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div class="flex items-center gap-3">
-              <label class="text-sm font-medium text-slate-700 dark:text-slate-300">Surge Aktif</label>
-              <button @click="pricingParams.surgeEnabled = !pricingParams.surgeEnabled"
-                :class="['w-10 h-6 rounded-full transition-colors flex items-center cursor-pointer', pricingParams.surgeEnabled ? 'bg-red-500 justify-end' : 'bg-slate-300 dark:bg-slate-600 justify-start']">
-                <span class="block w-4 h-4 bg-white rounded-full shadow-sm mx-1" />
-              </button>
+        <!-- SAG: Fiyat Hesaplayici -->
+        <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-700 p-5">
+          <h3 class="font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2 text-sm">
+            <DollarSign :size="15" class="text-green-500" /> Anlik Fiyat Hesapla
+          </h3>
+          <div class="grid grid-cols-2 gap-3 mb-4">
+            <div>
+              <label class="block text-xs text-slate-500 mb-1">Mesafe (km)</label>
+              <input v-model.number="pricingCalcInput.mesafe" type="number" step="0.5" min="0"
+                class="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500/20" />
             </div>
             <div>
-              <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Surge Esligi (siparis)</label>
-              <input v-model.number="pricingParams.surgeThreshold" type="number" step="1"
-                class="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
+              <label class="block text-xs text-slate-500 mb-1">Saat (0-23)</label>
+              <input v-model.number="pricingCalcInput.saat" type="number" min="0" max="23"
+                class="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500/20" />
             </div>
             <div>
-              <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Maks. Surge Carpani</label>
-              <input v-model.number="pricingParams.surgeMax" type="number" step="0.1" min="1"
-                class="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
+              <label class="block text-xs text-slate-500 mb-1">Zone</label>
+              <select v-model="pricingCalcInput.zone"
+                class="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500/20">
+                <option value="A">A — Merkez (x{{ pricingParams.zoneMultipliers.A }})</option>
+                <option value="B">B — Yakin (x{{ pricingParams.zoneMultipliers.B }})</option>
+                <option value="C">C — Uzak (x{{ pricingParams.zoneMultipliers.C }})</option>
+                <option value="D">D — Dis (x{{ pricingParams.zoneMultipliers.D }})</option>
+              </select>
             </div>
             <div>
-              <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Surge Artis Hizi (0-1)</label>
-              <input v-model.number="pricingParams.surgeDamping" type="number" step="0.05" min="0" max="1"
-                class="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
+              <label class="block text-xs text-slate-500 mb-1">Mod</label>
+              <select v-model="pricingCalcInput.mode"
+                class="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500/20">
+                <option value="instant">Express</option>
+                <option value="standard">Slotlu</option>
+                <option value="flex">Flex</option>
+              </select>
+            </div>
+            <div class="col-span-2 flex items-center gap-4">
+              <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+                <button @click="pricingCalcInput.frozen = !pricingCalcInput.frozen"
+                  :class="['w-9 h-5 rounded-full transition-colors flex items-center cursor-pointer',
+                    pricingCalcInput.frozen ? 'bg-blue-500 justify-end' : 'bg-slate-300 justify-start']">
+                  <span class="block w-3.5 h-3.5 bg-white rounded-full shadow-sm mx-0.5" />
+                </button>
+                Frigo / Soguk Zincir
+              </label>
+            </div>
+          </div>
+
+          <button @click="handleCalcPrice"
+            class="w-full py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium cursor-pointer transition-colors flex items-center justify-center gap-2 mb-4">
+            <DollarSign :size="14" /> Hesapla
+          </button>
+
+          <div v-if="pricingCalcResult"
+            class="bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+            <div class="flex items-center justify-between px-4 py-3 bg-green-50 dark:bg-green-950/30 border-b border-green-100 dark:border-green-900">
+              <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Toplam Fiyat</span>
+              <span class="text-2xl font-bold text-green-600 dark:text-green-400">{{ pricingCalcResult.total }} TL</span>
+            </div>
+            <div class="divide-y divide-slate-100 dark:divide-slate-700 max-h-48 overflow-y-auto">
+              <div v-for="(item, idx) in pricingCalcResult.breakdown" :key="idx"
+                class="flex items-center justify-between px-4 py-2">
+                <span class="text-xs text-slate-600 dark:text-slate-400">{{ item.name }}</span>
+                <span :class="['text-xs font-semibold', item.isMul ? 'text-amber-600' : 'text-slate-800 dark:text-slate-200']">
+                  {{ item.label }}
+                </span>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Fiyat Hesaplayici -->
-      <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-700 p-5 mb-6">
-        <h3 class="font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-          <DollarSign :size="16" class="text-green-500" /> Fiyat Hesaplayici
-          <span class="text-xs text-slate-400 font-normal">Parametrik model</span>
-        </h3>
-        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-4">
-          <div>
-            <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Mesafe (km)</label>
-            <input v-model.number="pricingCalcInput.mesafe" type="number" step="0.5" min="0"
-              class="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500/20" />
-          </div>
-          <div>
-            <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Agirlik (kg)</label>
-            <input v-model.number="pricingCalcInput.agirlik" type="number" step="0.5" min="0"
-              class="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500/20" />
-          </div>
-          <div>
-            <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Saat (0-23)</label>
-            <input v-model.number="pricingCalcInput.saat" type="number" min="0" max="23"
-              class="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500/20" />
-          </div>
-          <div>
-            <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Zone</label>
-            <select v-model="pricingCalcInput.zone"
-              class="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500/20">
-              <option value="A">A - Merkez (x{{ pricingParams.zoneMultipliers.A }})</option>
-              <option value="B">B - Yakin (x{{ pricingParams.zoneMultipliers.B }})</option>
-              <option value="C">C - Uzak (x{{ pricingParams.zoneMultipliers.C }})</option>
-              <option value="D">D - Dis (x{{ pricingParams.zoneMultipliers.D }})</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Mod</label>
-            <select v-model="pricingCalcInput.mode"
-              class="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500/20">
-              <option value="standard">Standart</option>
-              <option value="express">Express</option>
-              <option value="instant">Instant</option>
-              <option value="same_day">Ayni Gun</option>
-            </select>
-          </div>
-          <div class="flex flex-col">
-            <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Hafta Sonu</label>
-            <div class="flex-1 flex items-center">
-              <button @click="pricingCalcInput.haftaSonu = !pricingCalcInput.haftaSonu"
-                :class="['w-10 h-6 rounded-full transition-colors flex items-center cursor-pointer', pricingCalcInput.haftaSonu ? 'bg-indigo-500 justify-end' : 'bg-slate-300 dark:bg-slate-600 justify-start']">
-                <span class="block w-4 h-4 bg-white rounded-full shadow-sm mx-1" />
-              </button>
-            </div>
-          </div>
-          <div class="flex flex-col">
-            <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Frigo</label>
-            <div class="flex-1 flex items-center">
-              <button @click="pricingCalcInput.frozen = !pricingCalcInput.frozen"
-                :class="['w-10 h-6 rounded-full transition-colors flex items-center cursor-pointer', pricingCalcInput.frozen ? 'bg-blue-500 justify-end' : 'bg-slate-300 dark:bg-slate-600 justify-start']">
-                <span class="block w-4 h-4 bg-white rounded-full shadow-sm mx-1" />
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div v-if="pricingCalcResult" class="bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-          <div class="flex items-center justify-between px-5 py-3 bg-green-50 dark:bg-green-950/30 border-b border-green-100 dark:border-green-900">
-            <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Toplam Fiyat</span>
-            <span class="text-3xl font-bold text-green-600 dark:text-green-400">{{ pricingCalcResult.total }} TL</span>
-          </div>
-          <div class="divide-y divide-slate-100 dark:divide-slate-700">
-            <div v-for="(item, idx) in pricingCalcResult.breakdown" :key="idx" class="flex items-center justify-between px-5 py-2.5">
-              <span class="text-sm text-slate-600 dark:text-slate-400">{{ item.name }}</span>
-              <span :class="['text-sm font-semibold', item.isMul ? 'text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-slate-200']">{{ item.label }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Pricing Rules Header -->
+      <!-- Pricing Rules -->
       <div class="flex items-center justify-between mb-4">
         <h3 class="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
           <DollarSign :size="18" class="text-slate-500" /> Fiyat Kurallari
@@ -3986,7 +4342,6 @@ const hourlyChartOptions = {
         </button>
       </div>
 
-      <!-- Add Rule Form -->
       <div v-if="showAddRule" class="bg-blue-50 dark:bg-blue-950/30 rounded-xl border border-blue-100 dark:border-blue-800 p-4 mb-4">
         <h4 class="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Yeni Fiyat Kurali</h4>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -4006,7 +4361,6 @@ const hourlyChartOptions = {
         </div>
       </div>
 
-      <!-- Rules Table -->
       <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-700 overflow-hidden">
         <table class="w-full text-sm">
           <thead>
@@ -4050,6 +4404,93 @@ const hourlyChartOptions = {
           </tbody>
         </table>
       </div>
+
+      <!-- Ihaleye Cikan Rotalar Fiyat Tablosu -->
+      <div v-if="auctionRoutes.length > 0"
+        class="bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-700 overflow-hidden">
+        <div class="px-5 py-3 border-b border-slate-100 dark:border-slate-700 flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+          <h3 class="font-semibold text-slate-800 dark:text-white text-sm">Ihaleye Cikan Rotalar</h3>
+          <span class="text-xs text-slate-400 font-normal ml-1">{{ auctionRoutes.length }} rota fiyatlandirildi</span>
+          <span class="ml-auto text-sm font-bold text-green-700 dark:text-green-400">
+            Toplam: {{ auctionRoutes.reduce((s,r) => s + (r.routePrice||0), 0).toFixed(0) }} TL
+          </span>
+        </div>
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="bg-slate-50 dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700">
+              <th class="text-left px-4 py-2.5 font-medium text-slate-500 text-xs">#</th>
+              <th class="text-left px-4 py-2.5 font-medium text-slate-500 text-xs">Kurye</th>
+              <th class="text-center px-4 py-2.5 font-medium text-slate-500 text-xs">Siparis</th>
+              <th class="text-center px-4 py-2.5 font-medium text-slate-500 text-xs">Km</th>
+              <th class="text-center px-4 py-2.5 font-medium text-slate-500 text-xs">Sure</th>
+              <th class="text-right px-4 py-2.5 font-medium text-slate-500 text-xs">Kazanc</th>
+              <th class="text-right px-4 py-2.5 font-medium text-slate-500 text-xs">Rota Fiyati</th>
+              <th class="text-center px-4 py-2.5 font-medium text-slate-500 text-xs">Detay</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template v-for="(route, ri) in auctionRoutes" :key="route.id">
+              <tr class="border-b border-slate-50 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 cursor-pointer transition-colors"
+                @click="pricingRouteDetail = pricingRouteDetail === route.id ? null : route.id">
+                <td class="px-4 py-3 text-xs text-slate-400 font-medium">{{ ri+1 }}</td>
+                <td class="px-4 py-3">
+                  <div class="flex items-center gap-2">
+                    <div class="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold"
+                      :style="{ backgroundColor: route.color || '#6b7280' }">
+                      {{ (route.courierName || 'K').charAt(0) }}
+                    </div>
+                    <span class="text-xs font-medium text-slate-700 dark:text-slate-300">{{ route.courierName || `Kurye ${ri+1}` }}</span>
+                  </div>
+                </td>
+                <td class="px-4 py-3 text-center">
+                  <span class="px-2 py-0.5 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 rounded-full text-xs font-bold">{{ route.orderIds?.length || 0 }}</span>
+                </td>
+                <td class="px-4 py-3 text-center text-xs text-slate-600 dark:text-slate-400">{{ route.totalDistanceKm?.toFixed(1) || '—' }} km</td>
+                <td class="px-4 py-3 text-center text-xs text-slate-600 dark:text-slate-400">{{ route.totalTimeSec ? Math.round(route.totalTimeSec/60) + ' dk' : '—' }}</td>
+                <td class="px-4 py-3 text-right text-xs font-medium text-amber-600 dark:text-amber-400">{{ route.estimatedEarning?.toFixed(0) || '—' }} TL</td>
+                <td class="px-4 py-3 text-right">
+                  <span class="text-sm font-bold text-green-700 dark:text-green-400">{{ (route.routePrice || 0).toFixed(0) }} TL</span>
+                  <p class="text-[10px] text-slate-400">{{ route.orderIds?.length ? ((route.routePrice||0)/route.orderIds.length).toFixed(1) : '—' }} TL/sip</p>
+                </td>
+                <td class="px-4 py-3 text-center">
+                  <ChevronDown :size="14" class="mx-auto text-slate-400 transition-transform" :class="pricingRouteDetail === route.id ? 'rotate-180' : ''" />
+                </td>
+              </tr>
+              <tr v-if="pricingRouteDetail === route.id" class="border-b border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/30">
+                <td colspan="8" class="px-6 py-4">
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <p class="text-xs font-bold text-slate-600 dark:text-slate-400 mb-2 uppercase tracking-wide">Fiyat Kirilimi</p>
+                      <div class="space-y-1.5">
+                        <div v-for="item in getRoutePriceBreakdown(route)" :key="item.name" class="flex items-center justify-between">
+                          <span class="text-xs text-slate-500">{{ item.name }}</span>
+                          <span :class="['text-xs font-semibold', item.isMultiplier ? 'text-amber-600' : 'text-slate-700 dark:text-slate-300']">{{ item.label }}</span>
+                        </div>
+                        <div class="flex items-center justify-between pt-1.5 border-t border-slate-200 dark:border-slate-600">
+                          <span class="text-xs font-bold text-slate-700 dark:text-slate-300">Toplam</span>
+                          <span class="text-sm font-bold text-green-700 dark:text-green-400">{{ (route.routePrice || 0).toFixed(2) }} TL</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <p class="text-xs font-bold text-slate-600 dark:text-slate-400 mb-2 uppercase tracking-wide">Rotadaki Siparisler</p>
+                      <div class="space-y-1 max-h-40 overflow-y-auto">
+                        <div v-for="(ordId, oi) in (route.orderIds || [])" :key="ordId" class="flex items-center gap-2 text-xs">
+                          <span class="w-4 h-4 rounded-full text-white flex items-center justify-center text-[9px] font-bold flex-shrink-0"
+                            :style="{ backgroundColor: route.color || '#6b7280' }">{{ oi+1 }}</span>
+                          <span class="text-slate-600 dark:text-slate-400 font-mono truncate">{{ ordId }}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+
     </div>
 
     <!-- ==================== ALGORITMA TAB ==================== -->
@@ -4209,7 +4650,7 @@ const hourlyChartOptions = {
             class="px-5 py-1.5 bg-violet-600 shadow-violet-500/20 hover:bg-violet-700 text-white rounded-lg text-xs font-bold cursor-pointer shadow-sm disabled:opacity-50 flex items-center gap-1.5 transition-colors">
             <RefreshCw v-if="algoAutoSearching" :size="12" class="animate-spin" />
             <Zap v-else :size="12" />
-            AI Dispatch
+            Dispatch Et & Kaydet
           </button>
           <button @click="handleAlgoReset"
             class="px-3 py-1.5 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-600 rounded-lg text-xs cursor-pointer hover:text-slate-700 dark:hover:text-slate-200 hover:border-slate-400 transition-colors">
@@ -4296,24 +4737,6 @@ const hourlyChartOptions = {
               </div>
             </div>
           </div>
-          <!-- Ort. Kurye Puani -->
-          <div v-if="algoSimRoutes.length > 0" class="px-3 py-1.5 rounded-lg text-center min-w-[80px] border-2"
-            :class="{
-              'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-700': (algoSimRoutes.reduce((s,r) => s + (r.courierScore||0), 0) / algoSimRoutes.length) >= 7.5,
-              'bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-700': (algoSimRoutes.reduce((s,r) => s + (r.courierScore||0), 0) / algoSimRoutes.length) >= 5 && (algoSimRoutes.reduce((s,r) => s + (r.courierScore||0), 0) / algoSimRoutes.length) < 7.5,
-              'bg-red-50 dark:bg-red-950/30 border-red-300 dark:border-red-700': (algoSimRoutes.reduce((s,r) => s + (r.courierScore||0), 0) / algoSimRoutes.length) < 5,
-            }">
-            <div class="text-[10px] whitespace-nowrap font-medium"
-              :class="{
-                'text-emerald-600 dark:text-emerald-400': (algoSimRoutes.reduce((s,r) => s + (r.courierScore||0), 0) / algoSimRoutes.length) >= 7.5,
-                'text-amber-600 dark:text-amber-400': (algoSimRoutes.reduce((s,r) => s + (r.courierScore||0), 0) / algoSimRoutes.length) < 7.5,
-              }">Kurye Puan</div>
-            <div class="text-base font-black"
-              :class="{
-                'text-emerald-700 dark:text-emerald-300': (algoSimRoutes.reduce((s,r) => s + (r.courierScore||0), 0) / algoSimRoutes.length) >= 7.5,
-                'text-amber-700 dark:text-amber-300': (algoSimRoutes.reduce((s,r) => s + (r.courierScore||0), 0) / algoSimRoutes.length) < 7.5,
-              }">{{ (algoSimRoutes.reduce((s,r) => s + (r.courierScore||0), 0) / algoSimRoutes.length).toFixed(1) }}<span class="text-[10px] font-medium opacity-60">/10</span></div>
-          </div>
           <!-- Toplam Fiyat -->
           <div v-if="algoSimStats.totalPrice" class="px-3 py-1.5 rounded-lg text-center min-w-[80px] border-2 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-700">
             <div class="text-[10px] whitespace-nowrap font-medium text-emerald-600 dark:text-emerald-400">Toplam Fiyat</div>
@@ -4368,9 +4791,6 @@ const hourlyChartOptions = {
               <span class="text-[10px] font-bold" :class="algoAutoResult.bestScore >= 8 ? 'text-emerald-600' : algoAutoResult.bestScore >= 6 ? 'text-amber-600' : 'text-red-600'">
                 Verimlilik: {{ algoAutoResult.bestScore }}/10
               </span>
-              <span v-if="algoAutoResult.courierScore" class="text-[10px] font-bold" :class="algoAutoResult.courierScore >= 8 ? 'text-emerald-600' : algoAutoResult.courierScore >= 6 ? 'text-amber-600' : 'text-red-600'">
-                Kurye: {{ algoAutoResult.courierScore }}/10
-              </span>
               <span class="text-[10px] text-slate-400">{{ algoAutoResult.totalRoutes }} rota</span>
             </div>
           </div>
@@ -4402,55 +4822,19 @@ const hourlyChartOptions = {
                   'bg-amber-400': reason.type === 'warning',
                   'bg-emerald-400': reason.type === 'success',
                   'bg-violet-400': reason.type === 'algo',
+                  'bg-red-500': reason.type === 'error',
                 }"></span>
               <span :class="{
                 'text-slate-600 dark:text-slate-300': reason.type === 'info',
                 'text-amber-700 dark:text-amber-300': reason.type === 'warning',
                 'text-emerald-700 dark:text-emerald-300': reason.type === 'success',
                 'text-violet-700 dark:text-violet-300': reason.type === 'algo',
+                'text-red-600 dark:text-red-400 font-medium': reason.type === 'error',
               }">{{ reason.text }}</span>
             </div>
           </div>
         </div>
 
-        <!-- Algoritma Onerileri -->
-        <div v-if="algoSimSuggestions.length > 0" class="mb-3">
-          <button @click="algoSimSuggestionsOpen = !algoSimSuggestionsOpen"
-            class="flex items-center gap-2 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-200 transition-colors cursor-pointer">
-            <ChevronRight :size="14" :class="['transition-transform', algoSimSuggestionsOpen ? 'rotate-90' : '']" />
-            Algoritma Onerileri
-            <span class="text-[10px] font-normal text-slate-400">({{ algoSimSuggestions.filter(s => s.type !== 'optimal').length }} oneri)</span>
-          </button>
-          <div v-if="algoSimSuggestionsOpen" class="mt-2 space-y-2 bg-gradient-to-br from-indigo-50/80 to-white dark:from-indigo-950/30 dark:to-slate-900 border border-indigo-200 dark:border-indigo-800 rounded-lg p-3 max-h-[220px] overflow-y-auto">
-            <div v-for="(sug, si) in algoSimSuggestions" :key="si"
-              class="flex items-start gap-2 text-[11px] leading-relaxed rounded-lg p-2 transition-colors"
-              :class="{
-                'bg-white/80 dark:bg-slate-800/60 border border-emerald-200 dark:border-emerald-800': sug.type === 'better',
-                'bg-white/60 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700': sug.type === 'equal',
-                'bg-emerald-50/80 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800': sug.type === 'optimal',
-              }">
-              <span class="flex-shrink-0 mt-0.5">
-                <span v-if="sug.type === 'better'" class="text-emerald-500 font-bold text-xs">▲</span>
-                <span v-else-if="sug.type === 'equal'" class="text-blue-400 font-bold text-xs">═</span>
-                <span v-else class="text-emerald-500 font-bold text-xs">✓</span>
-              </span>
-              <div class="flex-1 min-w-0">
-                <span :class="{
-                  'text-emerald-800 dark:text-emerald-200': sug.type === 'better' || sug.type === 'optimal',
-                  'text-slate-600 dark:text-slate-300': sug.type === 'equal',
-                }">{{ sug.text }}</span>
-                <div v-if="sug.type === 'better'" class="flex items-center gap-2 mt-1">
-                  <span class="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">{{ sug.score }}/10</span>
-                  <span class="text-[10px] text-slate-400">{{ sug.totalKm }} km</span>
-                  <button v-if="sug.combo" @click="applySuggestion(sug.combo)"
-                    class="ml-auto text-[10px] px-2 py-0.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded font-semibold cursor-pointer transition-colors">
-                    Uygula
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
 
         <!-- 3-Panel Layout (full page) -->
         <div class="flex h-[calc(100vh-260px)] min-h-[500px] gap-0 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden mb-4">
@@ -4568,11 +4952,12 @@ const hourlyChartOptions = {
           </div>
 
           <!-- RIGHT: Route Cards -->
-          <div class="w-72 flex-shrink-0 bg-slate-50 dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700 flex flex-col">
+          <div class="w-80 flex-shrink-0 bg-slate-50 dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700 flex flex-col">
             <div class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 flex items-center justify-between">
               <div class="flex items-center gap-2">
                 <span class="text-sm font-bold text-slate-700 dark:text-slate-300">Rotalar</span>
                 <span class="text-xs bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full font-bold">{{ algoSimRoutes.length }}</span>
+                <span class="text-xs bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full">{{ algoSimRoutes.reduce((s, r) => s + r.orderIds.length, 0) }} siparis</span>
               </div>
               <span v-if="algoSimSelectedRouteId" @click="algoSimSelectedRouteId = null" class="text-[10px] text-indigo-600 cursor-pointer hover:underline font-medium">Tumu</span>
             </div>
@@ -4582,7 +4967,7 @@ const hourlyChartOptions = {
                   <Route :size="20" class="text-slate-400" />
                 </div>
                 <p class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Rota yok</p>
-                <p class="text-[10px] text-slate-400 dark:text-slate-500">Siparisleri uretip Dispatch Et butonuna basin</p>
+                <p class="text-[10px] text-slate-400 dark:text-slate-500">Siparisleri uretip Dispatch Et & Kaydet butonuna basin</p>
               </div>
 
               <!-- Route Cards -->
@@ -4603,12 +4988,12 @@ const hourlyChartOptions = {
                   <div class="w-2.5 h-2.5 rounded-full flex-shrink-0" :style="{ backgroundColor: route.color }" />
                   <span class="text-slate-800 dark:text-white font-bold text-xs">Rota #{{ rIdx + 1 }}</span>
                   <span v-if="route.isFrozen" class="text-[8px] px-1 py-0.5 bg-blue-50 border border-blue-200 rounded text-blue-600 font-semibold">FRIGO</span>
-                  <!-- Kurye Puani -->
-                  <span v-if="route.courierScore" class="text-[9px] px-1.5 py-0.5 rounded-full font-bold"
-                    :class="route.courierScore >= 8 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-                      : route.courierScore >= 6 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                  <!-- Zamaninda Teslimat Uyarisi -->
+                  <span v-if="route.onTimeRate < 100" class="text-[9px] px-1.5 py-0.5 rounded-full font-bold"
+                    :class="route.onTimeRate >= 95 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                      : route.onTimeRate >= 80 ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
                       : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'">
-                    {{ route.courierScore }}/10
+                    ⏱ %{{ route.onTimeRate }}
                   </span>
                   <div class="flex items-center gap-2 ml-auto text-[10px] text-slate-500 dark:text-slate-400">
                     <span><strong class="text-slate-700 dark:text-slate-200">{{ route.orderIds.length }}</strong> sip</span>
@@ -4653,17 +5038,8 @@ const hourlyChartOptions = {
                       <span class="text-slate-400">{{ route.onTimeRate >= 90 ? 'Basarili' : route.onTimeRate >= 70 ? 'Kabul edilebilir' : 'Iyilestirmeli' }}</span>
                     </div>
                   </div>
-                  <!-- Kurye Puani Detay + Algoritma -->
-                  <div class="mx-3 mb-2 p-2 rounded-lg border text-[10px]"
-                    :class="route.courierScore >= 8 ? 'bg-emerald-50/50 border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-800'
-                      : route.courierScore >= 6 ? 'bg-amber-50/50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-800'
-                      : 'bg-red-50/50 border-red-200 dark:bg-red-950/20 dark:border-red-800'">
-                    <div class="flex items-center justify-between mb-1">
-                      <span class="font-bold" :class="route.courierScore >= 8 ? 'text-emerald-700 dark:text-emerald-400' : route.courierScore >= 6 ? 'text-amber-700 dark:text-amber-400' : 'text-red-700 dark:text-red-400'">
-                        Kurye Puani: {{ route.courierScore }}/10
-                      </span>
-                      <span class="text-slate-400">{{ route.courierScore >= 8 ? 'Hizli & verimli' : route.courierScore >= 6 ? 'Kabul edilebilir' : 'Iyilestirmeli' }}</span>
-                    </div>
+                  <!-- Algoritma -->
+                  <div class="mx-3 mb-2 p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 text-[10px]">
                     <div class="text-[9px] text-slate-500 dark:text-slate-400">
                       <span class="font-medium">Algoritma:</span>
                       {{ getAlgoById(route.algorithm?.assignment)?.name || route.algorithm?.assignment }}

@@ -18,7 +18,7 @@ const badges = reactive({
 const filteredSections = computed(() =>
   MENU_SECTIONS.map(section => ({
     ...section,
-    items: section.items.filter(item => !item.permission || auth.hasPermission(item.permission)),
+    items: section.items.filter(item => !item.hidden && (!item.permission || auth.hasPermission(item.permission))),
   })).filter(section => section.items.length > 0)
 )
 
@@ -82,6 +82,11 @@ const userInitials = computed(() => {
             />
             <component :is="item.icon" :size="20" class="flex-shrink-0" />
             <span v-if="!collapsed" class="text-sm font-medium flex-1">{{ item.title }}</span>
+            <!-- Beta badge -->
+            <span
+              v-if="!collapsed && item.beta"
+              class="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-[9px] font-bold rounded uppercase"
+            >beta</span>
             <!-- Badge -->
             <span
               v-if="!collapsed && item.badgeKey && badges[item.badgeKey]"

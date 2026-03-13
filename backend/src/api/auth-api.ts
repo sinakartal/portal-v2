@@ -1,17 +1,19 @@
 /**
  * Auth API — login and token verification endpoints.
  * Uses simple crypto-based tokens (no JWT dependency needed).
+ * FileStore ile kalici depolama — restart'ta veri korunur.
  */
 
 import { Router, Request, Response } from 'express'
 import crypto from 'crypto'
 import { config } from '../config/env'
 import { logger } from '../utils/logger'
+import { FileStore } from '../utils/file-store'
 
 const router = Router()
 
-// In-memory user store (replace with DB in production)
-const users = new Map<string, {
+// FileStore ile kalici user ve token store
+const users = new FileStore<{
   _id: string
   email: string
   firstName: string
@@ -19,10 +21,9 @@ const users = new Map<string, {
   role: string
   permissions: string[]
   passwordHash: string
-}>()
+}>('auth-users')
 
-// In-memory token store
-const tokens = new Map<string, { userId: string; createdAt: number }>()
+const tokens = new FileStore<{ userId: string; createdAt: number }>('auth-tokens')
 
 function hashPassword(password: string): string {
   return crypto.createHash('sha256').update(password + config.jwtSecret).digest('hex')
@@ -32,11 +33,13 @@ function generateToken(): string {
   return 'brg_tok_' + crypto.randomBytes(32).toString('hex')
 }
 
-// Seed default users
+// Seed default users — sadece bossa seed et (restart'ta tekrar yazma)
 function seedUsers() {
+  if (users.size > 0) return
+
   const defaultUsers = [
     { _id: '1', email: 'sina@bringo.com', firstName: 'Sina', lastName: 'Kartal', role: 'super_admin', permissions: ['*'], password: '123456' },
-    { _id: '1b', email: 'admin@bringo.com', firstName: 'Sina', lastName: 'Kartal', role: 'super_admin', permissions: ['*'], password: '123456' },
+    { _id: '1b', email: 'admin@bringo.com', firstName: 'Admin', lastName: 'Bringo', role: 'super_admin', permissions: ['*'], password: '123456' },
     { _id: '2', email: 'manager@bringo.com', firstName: 'Manager', lastName: 'User', role: 'manager', permissions: ['orders:read', 'orders:create', 'orders:update', 'orders:assign', 'orders:bulk_import', 'couriers:read', 'couriers:track', 'routes:read', 'routes:create', 'routes:optimize', 'analytics:read', 'analytics:export', 'finance:read'], password: '123456' },
     { _id: '3', email: 'operator@bringo.com', firstName: 'Operator', lastName: 'User', role: 'operator', permissions: ['orders:read', 'orders:create', 'orders:update', 'couriers:read', 'couriers:track'], password: '123456' },
     { _id: '4', email: 'dispatcher@bringo.com', firstName: 'Dispatcher', lastName: 'User', role: 'dispatcher', permissions: ['orders:read', 'orders:create', 'orders:update', 'orders:assign', 'couriers:read', 'couriers:track', 'routes:read', 'routes:create'], password: '123456' },
@@ -50,7 +53,19 @@ function seedUsers() {
   if (sinaUser) users.set('sina', sinaUser)
 }
 
+// Eski tokenlari temizle (7 gun)
+function cleanExpiredTokens() {
+  const EXPIRY = 7 * 24 * 60 * 60 * 1000
+  const now = Date.now()
+  for (const [tokenKey, data] of tokens.entries()) {
+    if (now - data.createdAt > EXPIRY) {
+      tokens.delete(tokenKey)
+    }
+  }
+}
+
 seedUsers()
+cleanExpiredTokens()
 
 // POST /api/auth/login
 router.post('/login', (req: Request, res: Response) => {
@@ -97,7 +112,7 @@ router.get('/me', (req: Request, res: Response) => {
 
   // Find user by id
   let foundUser: any = null
-  for (const [, u] of users) {
+  for (const [, u] of users.entries()) {
     if (u._id === tokenData.userId) {
       const { passwordHash, ...safeUser } = u
       foundUser = safeUser

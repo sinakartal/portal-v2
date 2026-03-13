@@ -1,5 +1,10 @@
 <template>
   <div>
+    <!-- Beta Banner -->
+    <div class="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg flex items-center gap-2 text-blue-700 dark:text-blue-400 text-sm">
+      <span class="px-1.5 py-0.5 bg-blue-500 text-white text-[10px] font-bold rounded uppercase">Beta</span>
+      <span>Bu modul yakinda gercek verilerle guncellenecek.</span>
+    </div>
     <!-- Header -->
     <div class="flex items-center justify-between mb-6">
       <h1 class="text-xl font-bold text-slate-800 dark:text-white">Gun Sonu Mutabakat</h1>
@@ -72,7 +77,7 @@
       <table class="w-full text-sm">
         <thead>
           <tr class="border-b border-slate-100 dark:border-slate-800">
-            <th v-for="h in ['Kurye', 'Siparis', 'Teslim', 'Nakit', 'Teslim Ed.', 'Durum']" :key="h" class="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{{ h }}</th>
+            <th v-for="h in ['Kurye', 'Siparis', 'Teslim', 'Nakit', 'Teslim Ed.', 'Zimmet Durum', 'Durum']" :key="h" class="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{{ h }}</th>
           </tr>
         </thead>
         <tbody>
@@ -105,6 +110,11 @@
               <td class="px-4 py-3 text-slate-700 dark:text-slate-300">{{ c.delivered }}</td>
               <td class="px-4 py-3 font-semibold text-slate-800 dark:text-white">{{ fmt(c.cash) }}</td>
               <td class="px-4 py-3 font-medium text-slate-700 dark:text-slate-300">{{ c.submitted > 0 ? fmt(c.submitted) : '-' }}</td>
+              <td class="px-4 py-3">
+                <span :class="['px-2 py-1 rounded-full text-[11px] font-medium', c.zimmetCleared ? 'bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-400' : 'bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400']">
+                  {{ c.zimmetCleared ? 'Temizlendi' : 'Bekliyor' }}
+                </span>
+              </td>
               <td class="px-4 py-3">
                 <span v-if="c.status === 'completed'" class="px-2 py-1 bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-400 rounded-full text-[11px] font-medium">Tamam</span>
                 <span v-if="c.status === 'pending'" class="px-2 py-1 bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 rounded-full text-[11px] font-medium">Bekliyor</span>
@@ -278,7 +288,8 @@ const COURIERS = Array.from({ length: 45 }, (_, i) => {
   if (i >= 38 && i < 40) { submitted = cash; diff = -(50 + Math.floor(seed(i + 400) * 150)); status = 'issue'; diffNote = i === 38 ? `-${fmt(-diff)}` : `${delivered - 1} eksik` }
   else if (i >= 40) { submitted = 0; status = 'pending' }
   const waitMinutes = status === 'pending' ? 45 + Math.floor(seed(i + 500) * 200) : 0
-  return { id: i + 1, name, orders, delivered, cash, submitted: status === 'pending' ? 0 : submitted, status, diff, diffNote, waitMinutes }
+  const zimmetCleared = status === 'completed' && seed(i + 600) > 0.3
+  return { id: i + 1, name, orders, delivered, cash, submitted: status === 'pending' ? 0 : submitted, status, diff, diffNote, waitMinutes, zimmetCleared }
 })
 
 const project = ref('Tumu')
