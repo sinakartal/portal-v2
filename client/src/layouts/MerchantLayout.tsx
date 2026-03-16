@@ -11,7 +11,7 @@ const navItems = [
 ]
 
 export function MerchantLayout() {
-  const { tenant, logout } = useAuth()
+  const { tenant, logout, logoUrl } = useAuth()
   const navigate = useNavigate()
 
   const handleLogout = () => { logout(); navigate('/login') }
@@ -22,13 +22,19 @@ export function MerchantLayout() {
       <aside className="w-60 bg-bg-primary border-r border-border-subtle flex flex-col shrink-0">
         <div className="p-5 border-b border-border-subtle">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center text-white font-bold text-sm">
-              {tenant?.projectName?.[0] || 'M'}
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-text-primary">{tenant?.projectName || 'Merchant'}</p>
-              <p className="text-[10px] text-text-muted">Marka Paneli</p>
-            </div>
+            {logoUrl ? (
+              <img src={logoUrl} alt="Logo" className="h-8 object-contain" />
+            ) : (
+              <>
+                <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center text-white font-bold text-sm">
+                  {tenant?.projectName?.[0] || 'M'}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-text-primary">{tenant?.projectName || 'Merchant'}</p>
+                  <p className="text-[10px] text-text-muted">Marka Paneli</p>
+                </div>
+              </>
+            )}
           </div>
         </div>
 

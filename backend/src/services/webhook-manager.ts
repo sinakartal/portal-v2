@@ -41,36 +41,21 @@ export function removeWebhook(projectId: string): boolean {
 export async function sendWebhook(
   projectId: string,
   event: string,
-  payload: any
+  payload: any,
+  retryCount = 0
 ): Promise<WebhookDeliveryResult> {
   const config = webhookStore.get(projectId)
   const webhookId = uuidv4()
   const startTime = Date.now()
 
-  // No config or inactive
   if (!config || !config.isActive) {
-    return {
-      success: false,
-      webhookId,
-      event,
-      statusCode: null,
-      duration: 0,
-      error: config ? 'Webhook inactive' : 'No webhook configured',
-      mock: true,
-    }
+    return { success: false, webhookId, event, statusCode: null, duration: 0,
+      error: config ? 'Webhook inactive' : 'No webhook configured', mock: false }
   }
 
-  // Event not subscribed
   if (!config.events.includes(event) && event !== 'test') {
-    return {
-      success: false,
-      webhookId,
-      event,
-      statusCode: null,
-      duration: 0,
-      error: `Event '${event}' not in subscribed events`,
-      mock: true,
-    }
+    return { success: false, webhookId, event, statusCode: null, duration: 0,
+      error: `Event '${event}' not subscribed`, mock: false }
   }
 
   const webhookPayload = {
@@ -83,18 +68,6 @@ export async function sendWebhook(
   const payloadStr = JSON.stringify(webhookPayload)
   const signature = createHmacSignature(config.secret, payloadStr)
 
-  // MOCK MODE: Log instead of real HTTP call
-  // When ready for production, uncomment the fetch block below
-  logger.info('Webhook send (MOCK)', {
-    projectId,
-    event,
-    webhookId,
-    callbackUrl: config.callbackUrl,
-    signature: `sha256=${signature}`,
-  })
-
-  /*
-  // REAL HTTP CALL (uncomment when ready)
   try {
     const response = await fetch(config.callbackUrl, {
       method: 'POST',
@@ -111,24 +84,31 @@ export async function sendWebhook(
 
     const duration = Date.now() - startTime
     const result: WebhookDeliveryResult = {
-      success: response.ok,
-      webhookId,
-      event,
-      statusCode: response.status,
-      duration,
-      mock: false,
+      success: response.ok, webhookId, event,
+      statusCode: response.status, duration, mock: false,
     }
 
     if (response.ok) {
       config.failureCount = 0
       config.lastSuccess = Date.now()
+      logger.info('Webhook delivered', { projectId, event, status: response.status, duration })
     } else {
       config.failureCount++
       config.lastFailure = Date.now()
       result.error = `HTTP ${response.status}`
-      if (config.failureCount >= 5) {
-        config.isActive = false
-        logger.warn('Webhook auto-disabled after 5 failures', { projectId })
+
+      // Retry: 3 deneme, exponential backoff (5s, 30s, 120s)
+      const RETRY_DELAYS = [5000, 30000, 120000]
+      if (retryCount < RETRY_DELAYS.length) {
+        const delay = RETRY_DELAYS[retryCount]
+        logger.warn(`Webhook failed, retry ${retryCount + 1}/3 in ${delay/1000}s`, { projectId, event })
+        setTimeout(() => sendWebhook(projectId, event, payload, retryCount + 1), delay)
+      } else {
+        logger.error('Webhook max retries reached', { projectId, event })
+        if (config.failureCount >= 10) {
+          config.isActive = false
+          logger.warn('Webhook auto-disabled after 10 failures', { projectId })
+        }
       }
     }
 
@@ -139,41 +119,22 @@ export async function sendWebhook(
     config.failureCount++
     config.lastFailure = Date.now()
 
-    if (config.failureCount >= 5) {
-      config.isActive = false
-      logger.warn('Webhook auto-disabled after 5 failures', { projectId })
+    const result: WebhookDeliveryResult = {
+      success: false, webhookId, event, statusCode: null, duration,
+      error: err.message, mock: false,
     }
 
-    const result: WebhookDeliveryResult = {
-      success: false,
-      webhookId,
-      event,
-      statusCode: null,
-      duration,
-      error: err.message,
-      mock: false,
+    // Network hatasinda da retry yap
+    const RETRY_DELAYS = [5000, 30000, 120000]
+    if (retryCount < RETRY_DELAYS.length) {
+      const delay = RETRY_DELAYS[retryCount]
+      logger.warn(`Webhook network error, retry ${retryCount + 1}/3 in ${delay/1000}s`, { projectId, event })
+      setTimeout(() => sendWebhook(projectId, event, payload, retryCount + 1), delay)
     }
 
     addLog(projectId, event, webhookId, webhookPayload, result)
     return result
   }
-  */
-
-  const duration = Date.now() - startTime
-  const result: WebhookDeliveryResult = {
-    success: true,
-    webhookId,
-    event,
-    statusCode: 200,
-    duration,
-    mock: true,
-  }
-
-  config.lastSuccess = Date.now()
-  config.failureCount = 0
-
-  addLog(projectId, event, webhookId, webhookPayload, result)
-  return result
 }
 
 function addLog(

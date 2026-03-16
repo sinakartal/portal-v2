@@ -172,8 +172,13 @@
           <template v-if="loading">
             <div class="h-64 rounded-lg animate-pulse" :class="dark ? 'bg-slate-700' : 'bg-slate-100'" />
           </template>
-          <template v-else>
+          <template v-else-if="chartDays.length > 0 && chartRevenue.some(v => v > 0)">
             <Line :data="revenueVsCostData" :options="lineChartOptions" class="h-64" />
+          </template>
+          <template v-else>
+            <div class="h-64 flex items-center justify-center text-sm" :class="dark ? 'text-slate-500' : 'text-slate-400'">
+              Veri mevcut degil — sistem entegrasyonu tamamlandikca burada gorunecek.
+            </div>
           </template>
         </div>
 
@@ -440,7 +445,7 @@ const kpis = ref([])
 const courierProfitability = ref([])
 const projectPnL = ref([])
 
-// Chart mock data for 30 days
+// Chart data (API'den doldurulur)
 const chartDays = ref([])
 const chartRevenue = ref([])
 const chartCost = ref([])

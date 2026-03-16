@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import { getCouriers, getOrders } from '@/services/api'
 import { RefreshCw, Truck, Package, MapPin, Filter, Maximize2 } from 'lucide-vue-next'
 
 const auth = useAuthStore()
@@ -10,50 +11,76 @@ let orderMarkers = []
 let refreshTimer = null
 
 const loading = ref(true)
+const error = ref('')
 const lastUpdate = ref(null)
 const showCouriers = ref(true)
 const showOrders = ref(true)
 const fullscreen = ref(false)
 
-// Mock courier data (will be replaced with real API)
-const couriers = ref([
-  { id: 'C001', name: 'Ahmet Y.', lat: 41.0082, lng: 28.9784, status: 'delivering', activeOrders: 3 },
-  { id: 'C002', name: 'Mehmet K.', lat: 41.0150, lng: 29.0100, status: 'idle', activeOrders: 0 },
-  { id: 'C003', name: 'Ali D.', lat: 40.9900, lng: 28.9500, status: 'delivering', activeOrders: 2 },
-  { id: 'C004', name: 'Veli S.', lat: 41.0300, lng: 29.0300, status: 'returning', activeOrders: 1 },
-  { id: 'C005', name: 'Hasan T.', lat: 41.0050, lng: 28.9900, status: 'delivering', activeOrders: 4 },
-  { id: 'C006', name: 'Burak E.', lat: 40.9800, lng: 29.0200, status: 'idle', activeOrders: 0 },
-])
-
-const orders = ref([
-  { id: 'ORD-101', lat: 41.0120, lng: 28.9850, status: 'in_transit', mode: 'express' },
-  { id: 'ORD-102', lat: 41.0200, lng: 29.0050, status: 'pending', mode: 'standard' },
-  { id: 'ORD-103', lat: 40.9950, lng: 28.9600, status: 'in_transit', mode: 'standard' },
-  { id: 'ORD-104', lat: 41.0250, lng: 29.0250, status: 'ready_for_pickup', mode: 'express' },
-  { id: 'ORD-105', lat: 41.0000, lng: 28.9750, status: 'pending', mode: 'flex' },
-])
+const couriers = ref([])
+const orders = ref([])
 
 const stats = computed(() => ({
   totalCouriers: couriers.value.length,
-  activeCouriers: couriers.value.filter(c => c.status === 'delivering').length,
+  activeCouriers: couriers.value.filter(c => c.status === 'delivering' || c.status === 'busy' || c.status === 'active').length,
   totalOrders: orders.value.length,
-  pendingOrders: orders.value.filter(o => o.status === 'pending').length,
+  pendingOrders: orders.value.filter(o => o.status === 'pending' || o.status === 'new').length,
 }))
 
 function getStatusColor(status) {
   const colors = {
-    delivering: '#10b981',
-    idle: '#6b7280',
+    delivering: '#10b981', busy: '#10b981', active: '#10b981',
+    idle: '#6b7280', available: '#6b7280',
     returning: '#f59e0b',
-    in_transit: '#3b82f6',
-    pending: '#f59e0b',
+    in_transit: '#3b82f6', dispatched: '#3b82f6', assigned: '#3b82f6',
+    pending: '#f59e0b', new: '#f59e0b',
     ready_for_pickup: '#8b5cf6',
   }
   return colors[status] || '#6b7280'
 }
 
 function getModeIcon(mode) {
-  return mode === 'express' ? '⚡' : mode === 'flex' ? '🕐' : '📦'
+  return mode === 'instant' || mode === 'express' ? '⚡' : mode === 'flex' ? '🕐' : '📦'
+}
+
+// Gerçek API'den veri çek
+async function fetchData() {
+  try {
+    const [cRes, oRes] = await Promise.all([getCouriers(), getOrders()])
+
+    if (cRes.ok) {
+      const rawCouriers = Array.isArray(cRes.data) ? cRes.data : cRes.data?.couriers || []
+      couriers.value = rawCouriers
+        .filter(c => c.location?.lat || c.lat)
+        .map(c => ({
+          id: c.id || c.courierId,
+          name: c.name || c.courierName || `Kurye ${c.id}`,
+          lat: c.location?.lat || c.lat,
+          lng: c.location?.lng || c.lng,
+          status: c.status || 'idle',
+          activeOrders: c.activeOrders || c.currentOrderCount || 0,
+        }))
+    }
+
+    if (oRes.ok) {
+      const rawOrders = Array.isArray(oRes.data) ? oRes.data : oRes.data?.orders || []
+      orders.value = rawOrders
+        .filter(o => (o.deliveryLocation?.lat || o.lat) && o.status !== 'delivered' && o.status !== 'cancelled')
+        .map(o => ({
+          id: o.id || o.orderId,
+          lat: o.deliveryLocation?.lat || o.lat,
+          lng: o.deliveryLocation?.lng || o.lng,
+          status: o.status,
+          mode: o.mode || 'standard',
+        }))
+    }
+
+    lastUpdate.value = new Date()
+    error.value = ''
+  } catch (e) {
+    error.value = 'Veri alınamadı: ' + e.message
+    console.warn('[LiveMap] API hatası:', e)
+  }
 }
 
 async function initMap() {
@@ -62,34 +89,34 @@ async function initMap() {
 
   map = L.map('live-map-container', {
     center: [41.0082, 28.9784],
-    zoom: 13,
+    zoom: 12,
     zoomControl: true,
   })
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap contributors',
+    attribution: '&copy; OpenStreetMap',
     maxZoom: 19,
   }).addTo(map)
 
+  await fetchData()
   updateMarkers()
   loading.value = false
-  lastUpdate.value = new Date()
 }
 
 function updateMarkers() {
   if (!map) return
-  const L = window.L || require('leaflet')
 
-  // Clear old markers
+  // Mevcut marker'ları temizle
   courierMarkers.forEach(m => map.removeLayer(m))
   orderMarkers.forEach(m => map.removeLayer(m))
   courierMarkers = []
   orderMarkers = []
 
-  // Courier markers
   if (showCouriers.value) {
     couriers.value.forEach(c => {
       const color = getStatusColor(c.status)
+      const L = window.L
+      if (!L) return
       const icon = L.divIcon({
         className: 'custom-marker',
         html: `<div style="width:32px;height:32px;background:${color};border:2px solid white;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,0.3);font-size:14px;">🏍️</div>`,
@@ -97,16 +124,17 @@ function updateMarkers() {
         iconAnchor: [16, 16],
       })
       const marker = L.marker([c.lat, c.lng], { icon })
-        .bindPopup(`<b>${c.name}</b><br>Durum: ${c.status}<br>Aktif Siparis: ${c.activeOrders}`)
+        .bindPopup(`<b>${c.name}</b><br>Durum: ${c.status}<br>Aktif Sipariş: ${c.activeOrders}`)
         .addTo(map)
       courierMarkers.push(marker)
     })
   }
 
-  // Order markers
   if (showOrders.value) {
     orders.value.forEach(o => {
       const color = getStatusColor(o.status)
+      const L = window.L
+      if (!L) return
       const icon = L.divIcon({
         className: 'custom-marker',
         html: `<div style="width:24px;height:24px;background:${color};border:2px solid white;border-radius:4px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,0.2);font-size:12px;">${getModeIcon(o.mode)}</div>`,
@@ -119,21 +147,23 @@ function updateMarkers() {
       orderMarkers.push(marker)
     })
   }
-}
 
-function simulateMovement() {
-  couriers.value.forEach(c => {
-    if (c.status === 'delivering') {
-      c.lat += (Math.random() - 0.5) * 0.002
-      c.lng += (Math.random() - 0.5) * 0.002
+  // Aktif kurye varsa haritayı onlara ortala
+  if (couriers.value.length > 0 && map) {
+    const L = window.L
+    if (L) {
+      const bounds = L.latLngBounds(couriers.value.map(c => [c.lat, c.lng]))
+      if (orders.value.length > 0) {
+        orders.value.forEach(o => bounds.extend([o.lat, o.lng]))
+      }
+      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 })
     }
-  })
-  updateMarkers()
-  lastUpdate.value = new Date()
+  }
 }
 
-function refresh() {
-  simulateMovement()
+async function refresh() {
+  await fetchData()
+  updateMarkers()
 }
 
 function toggleFullscreen() {
@@ -141,13 +171,46 @@ function toggleFullscreen() {
   setTimeout(() => map?.invalidateSize(), 300)
 }
 
-onMounted(() => {
-  initMap()
-  refreshTimer = setInterval(simulateMovement, 5000)
+// SSE kurye konum güncelleme
+function connectSSE() {
+  try {
+    const evtSource = new EventSource('/algoritma/api/events/stream')
+    evtSource.addEventListener('courier_location', (e) => {
+      const data = JSON.parse(e.data)
+      const courier = couriers.value.find(c => c.id === data.courierId)
+      if (courier && data.lat && data.lng) {
+        courier.lat = data.lat
+        courier.lng = data.lng
+        courier.status = data.status || courier.status
+        updateMarkers()
+        lastUpdate.value = new Date()
+      }
+    })
+    evtSource.addEventListener('order_status', async () => {
+      await fetchData()
+      updateMarkers()
+    })
+    evtSource.onerror = () => evtSource.close()
+    return evtSource
+  } catch {
+    return null
+  }
+}
+
+let sseSource = null
+
+onMounted(async () => {
+  await initMap()
+  // SSE bağlantısı dene — çalışmazsa polling ile devam et
+  sseSource = connectSSE()
+  if (!sseSource) {
+    refreshTimer = setInterval(refresh, 15000)
+  }
 })
 
 onBeforeUnmount(() => {
   if (refreshTimer) clearInterval(refreshTimer)
+  if (sseSource) sseSource.close()
   if (map) { map.remove(); map = null }
 })
 </script>
@@ -170,6 +233,11 @@ onBeforeUnmount(() => {
           <Maximize2 :size="14" />
         </button>
       </div>
+    </div>
+
+    <!-- Error banner -->
+    <div v-if="error" class="mb-3 px-4 py-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-lg border border-red-200 dark:border-red-800">
+      {{ error }}
     </div>
 
     <!-- Stats Bar -->
@@ -209,7 +277,7 @@ onBeforeUnmount(() => {
       id="live-map-container"
       class="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden"
       :class="fullscreen ? 'mx-4 mb-4' : ''"
-      :style="{ height: fullscreen ? 'calc(100vh - 220px)' : '600px' }"
+      :style="{ height: fullscreen ? 'calc(100vh - 260px)' : '600px' }"
     >
       <div v-if="loading" class="h-full flex items-center justify-center bg-slate-100 dark:bg-slate-800">
         <div class="text-slate-500 flex items-center gap-2">

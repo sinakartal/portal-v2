@@ -718,8 +718,8 @@ const monthLabels = ['Eylul', 'Ekim', 'Kasim', 'Aralik', 'Ocak', 'Subat']
 
 const monthlyBreakdown = computed(() => {
   return monthLabels.map((label, idx) => {
-    const basePayroll = totalNet.value * (0.7 + Math.random() * 0.6)
-    const baseInvoice = totalInvoiceAmount.value * (0.5 + Math.random() * 0.8)
+    const basePayroll = totalNet.value * 0.72      // %72 sabit kurye hakediş oranı
+    const baseInvoice = totalInvoiceAmount.value * 0.65  // %65 sabit fatura oranı
     return {
       label,
       payroll: Math.round(basePayroll / (6 - idx * 0.3)),

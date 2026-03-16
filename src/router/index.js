@@ -12,7 +12,7 @@ function getRoutes() {
       children: [
         { path: '', redirect: '/dashboard' },
         { path: 'dashboard', name: 'dashboard', component: () => import('@/pages/dashboard/Dashboard.vue') },
-        { path: 'live-map', name: 'live-map', component: () => import('@/pages/dashboard/Dashboard.vue') },
+        { path: 'live-map', name: 'live-map', component: () => import('@/pages/livemap/LiveMap.vue') },
         { path: 'pricing', name: 'pricing', component: () => import('@/pages/dashboard/Dashboard.vue') },
         { path: 'algorithm', name: 'algorithm', component: () => import('@/pages/dashboard/Dashboard.vue') },
         { path: 'orders', component: () => import('@/pages/orders/OrderList.vue') },
